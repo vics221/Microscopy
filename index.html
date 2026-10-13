@@ -954,6 +954,7 @@ function draw() {
   }
   for (let k = 0; k <= C; k++) { const ctx = S.ui[k].ctx; ctx.putImageData(S.idata[k], 0, 0); burnBar(ctx, dw, dh, S.pxView); }
   drawHists(corr);
+  if (S.showWf) scheduleWorkflow();
   const m = S.meta;
   $('#where').textContent = `${m.labels[S.frame]}${m.N > 1 ? `  (${S.frame + 1}/${m.N})` : ''}${m.Z > 1 ? `, Z ${S.z + 1}/${m.Z}` : ''}`;
 }
@@ -968,18 +969,27 @@ function drawHists(corr) {
     });
     S.histKey = S.corrKey;
   }
-  const dpr = window.devicePixelRatio || 1, ink = cssVar('--ink');
+  const dpr = window.devicePixelRatio || 1, ink = cssVar('--ink'), field = cssVar('--field') || '#fff';
+  S.hmap = S.hmap || []; S.hfreeze = S.hfreeze || [];
   for (let c = 0; c < C; c++) {
-    const cv = S.ui[c].hist, W = cv.width / dpr, H = cv.height / dpr, ctx = cv.getContext('2d'), hs = S.hist[c];
+    const cv = S.ui[c].hist, W = Math.max(120, Math.round(cv.clientWidth || 220)), H = 64, ctx = cv.getContext('2d'), hs = S.hist[c];
+    if (cv.width !== Math.round(W * dpr) || cv.height !== Math.round(H * dpr)) { cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
-    let ymax = 1; for (const v of hs.counts) if (v > ymax) ymax = v; ymax *= 1.05;
-    const X = v => clamp((v - hs.x0) / (hs.x1 - hs.x0), 0, 1) * W, Y = v => H - 12 - v / ymax * (H - 16);
+    // the axis always includes the chosen min/max, so the markers can be seen (and dragged) wherever they are
+    let vx0 = Math.min(hs.x0, S.lo[c]), vx1 = Math.max(hs.x1, S.hi[c]); const pd = 0.04 * (vx1 - vx0); vx0 -= pd; vx1 += pd;
+    const fz = S.hfreeze[c]; if (fz) { vx0 = fz.vx0; vx1 = fz.vx1; }
+    S.hmap[c] = { vx0, vx1 };
+    const base = H - 14, X = v => (v - vx0) / (vx1 - vx0) * W; let ymax = 1; for (const v of hs.counts) if (v > ymax) ymax = v; ymax *= 1.05;
     ctx.fillStyle = S.luts[c] === 'gray' ? '#808080' : lutCss(S.luts[c]);
-    const bw = W / 256; for (let i = 0; i < 256; i++) { const hh = (H - 12) - Y(hs.counts[i]); ctx.fillRect(i * bw, Y(hs.counts[i]), bw + 0.6, hh); }
-    ctx.strokeStyle = ink; ctx.lineWidth = 1.3; ctx.beginPath();
-    ctx.moveTo(0, H - 12); ctx.lineTo(X(S.lo[c]), H - 12); ctx.lineTo(X(S.hi[c]), 4); ctx.lineTo(W, 4); ctx.stroke();
-    ctx.fillStyle = ink; ctx.font = '9px system-ui,sans-serif'; ctx.textBaseline = 'alphabetic';
-    ctx.textAlign = 'left'; ctx.fillText(hs.x0.toFixed(0), 2, H - 2); ctx.textAlign = 'right'; ctx.fillText(hs.x1.toFixed(0), W - 2, H - 2);
+    const bw = (hs.x1 - hs.x0) / 256;
+    for (let i = 0; i < 256; i++) { const t = hs.counts[i] / ymax * (base - 3), a = X(hs.x0 + i * bw), b = X(hs.x0 + (i + 1) * bw); ctx.fillRect(a, base - t, Math.max(1, b - a + 0.5), t); }
+    const xl = clamp(X(S.lo[c]), 0, W), xh = clamp(X(S.hi[c]), 0, W);
+    ctx.globalAlpha = 0.65; ctx.fillStyle = field; ctx.fillRect(0, 0, xl, base); ctx.fillRect(xh, 0, W - xh, base); ctx.globalAlpha = 1;   // outside the display range = clipped
+    ctx.strokeStyle = ink; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(0, base + 0.5); ctx.lineTo(W, base + 0.5); ctx.stroke();
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(xl, 0); ctx.lineTo(xl, base); ctx.moveTo(xh, 0); ctx.lineTo(xh, base); ctx.stroke();
+    ctx.fillStyle = ink; ctx.font = '10px system-ui,sans-serif'; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = xl < 34 ? 'left' : 'right'; ctx.fillText(S.lo[c].toFixed(0), xl < 34 ? xl + 3 : xl - 3, H - 3);
+    ctx.textAlign = xh > W - 34 ? 'right' : 'left'; ctx.fillText(S.hi[c].toFixed(0), xh > W - 34 ? xh - 3 : xh + 3, H - 3);
   }
 }
 function setBoxes(c) { S.ui[c].min.value = S.lo[c].toFixed(1); S.ui[c].max.value = S.hi[c].toFixed(1); }
@@ -1007,7 +1017,7 @@ function buildPanels() {
     const card = document.createElement('div'); card.className = 'card';
     card.innerHTML = `
       <div><h4>Colour</h4><div class="luts"></div></div>
-      <div><h4>Brightness / contrast</h4>
+      <div><h4>Brightness / contrast (type values or drag the lines)</h4>
         <div class="bc"><label>min <input type="text" class="min" inputmode="decimal"></label><label>max <input type="text" class="max" inputmode="decimal"></label><button class="btn small auto" type="button">Auto</button></div></div>
       <canvas class="hist" width="440" height="128"></canvas>
       <fieldset><legend>Objects found by</legend>
@@ -1021,7 +1031,23 @@ function buildPanels() {
     col.appendChild(card);
     ui.hist = $('canvas.hist', card); ui.min = $('.min', card); ui.max = $('.max', card); ui.note = $('.illnote', card);
     const dpr = window.devicePixelRatio || 1; ui.hist.width = 440 * dpr / 2; ui.hist.height = 128 * dpr / 2;
-    ui.hist.style.height = '64px';
+    ui.hist.style.height = '64px'; ui.hist.style.touchAction = 'none'; ui.hist.style.cursor = 'ew-resize';
+    {
+      let drag = null;
+      const val = e => { const mp = S.hfreeze[k] || S.hmap[k], r = ui.hist.getBoundingClientRect(); return mp.vx0 + (e.clientX - r.left) / r.width * (mp.vx1 - mp.vx0); };
+      ui.hist.addEventListener('pointerdown', e => {
+        if (!S.hmap || !S.hmap[k]) return; S.hfreeze[k] = { ...S.hmap[k] };
+        const v = val(e); drag = Math.abs(v - S.lo[k]) <= Math.abs(v - S.hi[k]) ? 'lo' : 'hi'; ui.hist.setPointerCapture(e.pointerId); mv(e);
+      });
+      const mv = e => {
+        if (!drag) return; const v = val(e), gap = (S.hfreeze[k].vx1 - S.hfreeze[k].vx0) * 0.005;
+        if (drag === 'lo') S.lo[k] = Math.min(v, S.hi[k] - gap); else S.hi[k] = Math.max(v, S.lo[k] + gap);
+        setBoxes(k); refresh();
+      };
+      ui.hist.addEventListener('pointermove', mv);
+      const end = () => { if (drag) { drag = null; S.hfreeze[k] = null; refresh(); } };
+      ui.hist.addEventListener('pointerup', end); ui.hist.addEventListener('pointercancel', end);
+    }
     const lw = $('.luts', card);
     for (const n of LUT_NAMES) {
       const b = document.createElement('button'); b.type = 'button'; b.title = n; b.setAttribute('aria-label', n);
@@ -1102,7 +1128,7 @@ function buildToolbar() {
   }, 'Used for the scalebar and for the margin around objects');
   const b = document.createElement('div'); b.className = 'btns';
   const mk = (txt, fn, id) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn'; x.textContent = txt; if (id) x.id = id; x.onclick = fn; b.appendChild(x); return x; };
-  mk('Show detected objects', toggleObjects, 'bObj'); mk('Illumination profiles', toggleIllum, 'bIll'); mk('Workflow figure', showWorkflow);
+  mk('Show detected objects', toggleObjects, 'bObj'); mk('Illumination profiles', toggleIllum, 'bIll'); mk('Workflow figure', toggleWorkflow, 'bWf');
   mk('Export this slice (PNG)', exportSlice); mk('Save settings', saveSettings); mk('Load settings', () => $('#settingsFile').click());
   tb.appendChild(b);
 }
@@ -1166,40 +1192,52 @@ async function updateObjects() {
 }
 
 /* ---- workflow figure (for presentations) ---- */
+/* ---- workflow figure: LIVE, always uses the settings of the main view ---- */
 const WF_CACHE = new Map();
-async function wfInfo(c, mode, detect) {
-  if (mode === 'image') { if (S.illum[c].mode === 'image') return S.illum[c]; detect = 'bright'; }
-  else if (S.illum[c].mode === mode && S.detect[c] === detect) return S.illum[c];
-  const useShare = !!(S.share[c] && mode !== 'image' && S.meta.C > 1);
-  const key = [c, mode, detect, useShare, S.offset, S.illumVer, S.meta.pxUm].join('|');
-  if (!WF_CACHE.has(key)) {
-    if (detect === 'edge' || (useShare && S.detect.includes('edge'))) await ensureEdgeGrid();
-    WF_CACHE.set(key, estimateFlat(c, mode, useShare ? sourcesFor(c, S.illum) : [], S.offset, detect));
-  }
+function wfOld(c) {                               // initial map = whole-image method
+  if (S.illum[c].mode === 'image') return S.illum[c];
+  const key = [c, S.offset, S.illumVer].join('|');
+  if (!WF_CACHE.has(key)) { if (WF_CACHE.size > 12) WF_CACHE.clear(); WF_CACHE.set(key, estimateFlat(c, 'image', [], S.offset)); }
   return WF_CACHE.get(key);
 }
-async function showWorkflow() {
-  setStatus('Building workflow figure …', 'busy'); await tick(); await tick();
+let wfTimer = 0;
+function scheduleWorkflow() { clearTimeout(wfTimer); wfTimer = setTimeout(() => buildWorkflow(false), 350); }
+function wfTag() { const m = S.meta; return (m.labels[S.frame] || 'image').replace(/\s+/g, '_') + (m.Z > 1 ? `_Z${String(S.z + 1).padStart(3, '0')}` : ''); }
+function wfSection() {
+  const sec = $('#wf'); sec.classList.remove('hidden');
+  if (!S.wfCanvas) {
+    sec.innerHTML = '<h2>Workflow figure</h2><p class="sub">Live: follows the image, Z slice and every setting of the main view (colours, min/max, flat-field mode, object detection, strength, smoothing, camera offset) and redraws when you change them.</p><div class="btns"><button type="button" class="btn primary" id="wfSave">Save as PNG</button></div>';
+    const cv = document.createElement('canvas'); cv.style.cssText = 'width:100%;height:auto;margin-top:10px;border:1px solid var(--line);border-radius:6px;background:#fff';
+    sec.appendChild(cv); S.wfCanvas = cv;
+    $('#wfSave').onclick = async () => { const blob = await new Promise(r => S.wfCanvas.toBlob(r, 'image/png')); saveBlob(`workflow_${wfTag()}.png`, blob); };
+  }
+  return S.wfCanvas;
+}
+function toggleWorkflow() {
+  S.showWf = !S.showWf; $('#bWf').classList.toggle('on', S.showWf);
+  if (!S.showWf) { $('#wf').classList.add('hidden'); return; }
+  wfSection(); buildWorkflow(true);
+}
+async function buildWorkflow(scroll) {
+  if (!S.showWf || !S.cur) return;
+  const tok = S.wfTok = (S.wfTok || 0) + 1;
   try {
-    if (S.detect.includes('edge')) await ensureEdgeGrid();
-    const m = S.meta, C = m.C, fr = S.cur, { dw, dh } = S, chans = [];
+    if (S.detect.includes('edge') && !S.gE) { await ensureEdgeGrid(); setStatus(`${S.name} – ready`); }
+    if (tok !== S.wfTok) return;
+    const m = S.meta, C = m.C, fr = S.cur, { dw, dh } = S, corr = corrected(fr), chans = [];
     for (let c = 0; c < C; c++) {
-      const raw = fr.disp[c], kind = S.detect[c], adjMode = S.want[c] !== 'image' ? S.want[c] : 'background';
-      const nw = await wfInfo(c, adjMode, kind), old = await wfInfo(c, 'image', 'bright'), dark = nw.dark;
-      const fl = resizeBilinear(nw.flat, S.ew, S.eh, dw, dh), dsub = new Float32Array(raw.length), adj = new Float32Array(raw.length);
-      for (let i = 0; i < raw.length; i++) { dsub[i] = Math.max(raw[i] - dark, 0); adj[i] = dsub[i] / fl[i] + dark; }
-      const [r0, r1] = pctl(raw, [0.5, 99.8]), [a0, a1] = pctl(adj, [0.5, 99.8]);
-      chans.push({ raw, adj, dsub, old, nw, kind, adjMode, vmin: Math.min(r0, a0), vmax: Math.max(r1, a1), lut: LUTS[S.luts[c]], g: pctl(dsub, [0.5, 99.8]) });
+      const raw = S.sigma > 0 ? gaussian(fr.disp[c], dw, dh, S.sigma / S.ds) : fr.disp[c], ill = S.illum[c], dark = ill.dark, dsub = new Float32Array(raw.length);
+      for (let i = 0; i < raw.length; i++) dsub[i] = Math.max(raw[i] - dark, 0);
+      chans.push({ raw, adj: corr[c], dsub, old: wfOld(c), nw: ill, kind: S.detect[c], vmin: S.lo[c], vmax: S.hi[c], lut: LUTS[S.luts[c]], g: pctl(dsub, [0.5, 99.8]) });
     }
     const G = pickGrid(), objs = detectAll(fr, G);
-    // ---- layout (pixels)
     const PW = 460, PH = Math.round(PW * dh / dw), gx = Math.round(0.26 * PW), gy = Math.round(0.40 * PH), L = 100, T = 140, B = 110, R = 90;
     const nRows = C + (C > 1 ? 1 : 0), W = L + 7 * PW + 6 * gx + R, H = T + nRows * PH + (nRows - 1) * gy + B;
-    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const cv = wfSection(); cv.width = W; cv.height = H;
     const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
     const FT = '21px "Segoe UI",system-ui,sans-serif', FL = '17px "Segoe UI",system-ui,sans-serif', FS = '14px "Segoe UI",system-ui,sans-serif', INK = '#222';
     const px = k => L + k * (PW + gx), py = r => T + r * (PH + gy);
-    const titles = ['1  Raw data\n(dashed line: profile path)', '2  Illumination profile\n(bottom-left to top-right)', '3  Objects identified\n(round, smooth outlines)', '4  Illumination map\n(initial)', '5  Illumination map\n(adjusted)', '6  Adjusted picture\n(raw / illumination map)', '7  New illumination profile\n(bottom-left to top-right)'];
+    const titles = ['1  Raw data\n(dashed line: profile path)', '2  Illumination profile\n(bottom-left to top-right)', '3  Objects identified\n(round, smooth outlines)', '4  Illumination map\n(initial: whole image)', '5  Illumination map\n(as used in main view)', '6  Adjusted picture\n(raw / illumination map)', '7  New illumination profile\n(bottom-left to top-right)'];
     const text = (s, x, y, font, align = 'center', color = INK, lh = 24, base = 'alphabetic') => { ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; String(s).split('\n').forEach((t, i) => ctx.fillText(t, x, y + i * lh)); };
     const title = (k, r, s) => text(s, px(k) + PW / 2, py(r) - 44, FT);
     const drawCv = (oc, k, r) => ctx.drawImage(oc, px(k), py(r), PW, PH);
@@ -1232,17 +1270,14 @@ async function showWorkflow() {
     const used = [];
     for (let c = 0; c < C; c++) {
       const ch = chans[c], first = c === 0;
-      used.push(`${m.chNames[c]}: ${MODE_LABELS[ch.adjMode]}, objects by ${DETECT_LABELS[ch.kind]}` + (S.share[c] && C > 1 ? ', objects of other channels masked' : ''));
-      // 1 raw
+      used.push(`${m.chNames[c]}: flat-field from ${MODE_LABELS[ch.nw.mode]}, objects by ${DETECT_LABELS[ch.kind]}` + (S.share[c] && C > 1 ? ' (+ other channels)' : '') + `, display ${ch.vmin.toFixed(0)}–${ch.vmax.toFixed(0)}`);
       if (first) title(0, c, titles[0]); drawCv(tint(ch.raw, ch.lut, ch.vmin, ch.vmax), 0, c); diag(0, c); bar(0, c); rowLabel(c, m.chNames[c]);
-      // 3 objects
       if (first) title(2, c, titles[2]);
       drawCv(tint(ch.dsub, [1, 1, 1], ch.g[0], ch.g[1]), 2, c);
       const oc = document.createElement('canvas'); oc.width = G.w; oc.height = G.h; const octx = oc.getContext('2d'), ov = makeOverlay(objs[c], G.w, G.h, octx); octx.putImageData(ov.id, 0, 0); drawCv(oc, 2, c); bar(2, c);
       if (ov.own + ov.oth + ov.bad) note(2, c, `${ov.own} found here (green)` + (S.share[c] && C > 1 ? `\n${ov.oth} from other channel (cyan)` : '') + (ov.bad ? `\n${ov.bad} rejected (red)` : '') + `\nfound by ${DETECT_LABELS[ch.kind]}`); else note(2, c, 'no clear objects');
-      // 4 / 5 illumination maps (one colour scale)
       let vmn = Infinity, vmx = -Infinity; for (const inf of [ch.old, ch.nw]) for (const v of inf.smooth) { if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
-      [[3, ch.old, 'whole image'], [4, ch.nw, MODE_LABELS[ch.adjMode]]].forEach(([k, inf, what]) => {
+      [[3, ch.old, 'whole image'], [4, ch.nw, MODE_LABELS[ch.nw.mode]]].forEach(([k, inf, what]) => {
         if (first) title(k, c, titles[k]);
         drawCv(mkCanvas(S.ew, S.eh, d => { for (let i = 0; i < inf.smooth.length; i++) { const col = magma((inf.smooth[i] - vmn) / Math.max(vmx - vmn, 1e-6)); d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 255; } }), k, c);
         diag(k, c); bar(k, c);
@@ -1255,28 +1290,22 @@ async function showWorkflow() {
           for (let i = 0; i <= 5; i++) { const v = vmn + (vmx - vmn) * i / 5, yy = py(c) + PH - PH * i / 5; ctx.beginPath(); ctx.moveTo(cx + cw, yy); ctx.lineTo(cx + cw + 5, yy); ctx.stroke(); text(v.toFixed(0), cx + cw + 8, yy, FS, 'left', INK, 0, 'middle'); }
         }
       });
-      // 6 adjusted picture
       if (first) title(5, c, titles[5]); drawCv(tint(ch.adj, ch.lut, ch.vmin, ch.vmax), 5, c); diag(5, c); bar(5, c);
-      // 2 / 7 profiles
       const fv = S.pxView, fe = S.pxEst, pr = diagProfile(ch.raw, dw, dh, 5), pa = diagProfile(ch.adj, dw, dh, 5), po = diagProfile(ch.old.smooth, S.ew, S.eh, 1), pn = diagProfile(ch.nw.smooth, S.ew, S.eh, 1);
       if (first) { title(1, c, titles[1]); title(6, c, titles[6]); }
       plot(1, c, [{ x: um(pr.d, fv), y: pr.v, color: '#000', lw: 1, label: 'raw data' }, { x: um(po.d, fe), y: po.v, color: '#dc143c', lw: 3, label: 'illumination map (initial)' }]);
-      plot(6, c, [{ x: um(pr.d, fv), y: pr.v, color: '#bbb', lw: 1, label: 'raw data' }, { x: um(pa.d, fv), y: pa.v, color: '#000', lw: 1.2, label: 'adjusted picture' }, { x: um(pn.d, fe), y: pn.v, color: '#dc143c', lw: 3, label: 'illumination map (adjusted)' }]);
+      plot(6, c, [{ x: um(pr.d, fv), y: pr.v, color: '#bbb', lw: 1, label: 'raw data' }, { x: um(pa.d, fv), y: pa.v, color: '#000', lw: 1.2, label: 'adjusted picture' }, { x: um(pn.d, fe), y: pn.v, color: '#dc143c', lw: 3, label: 'illumination map (as used)' }]);
     }
     if (C > 1) {
       const r = C;
       title(0, r, 'Merged channels\n(raw)'); drawCv(mergedCv('raw'), 0, r); bar(0, r); rowLabel(r, 'Merged');
       title(5, r, 'Merged channels\n(adjusted)'); drawCv(mergedCv('adj'), 5, r); bar(5, r);
-      const lines = ['Settings used', '', ...used, '', `Camera offset: ${S.offset} gray values`, 'Colours: ' + m.chNames.map((n, c) => `${n} = ${S.luts[c]}`).join(', ')];
+      const lines = ['Settings used (same as main view)', '', ...used, '', `Flat-field strength: ${S.strength.toFixed(2)}   Smoothing: ${S.sigma > 0 ? 'sigma ' + S.sigma + ' px' : 'off'}`, `Camera offset: ${S.offset} gray values`, 'Colours: ' + m.chNames.map((n, c) => `${n} = ${S.luts[c]}`).join(', ')];
       text(lines.join('\n'), (px(1) + px(4) + PW) / 2, py(r) + PH / 2 - lines.length * 11, FL, 'center', '#444', 26);
     }
     text(`Flat-field workflow - ${m.labels[S.frame]}` + (m.Z > 1 ? `, Z slice ${S.z + 1}/${m.Z}` : ''), W / 2, 58, '30px "Segoe UI",system-ui,sans-serif');
-    text(`Adjusted picture = (raw - offset) / illumination map + offset, shown with the same colour scale as the raw data. Both illumination maps share one colour scale (colour bar: gray values). Scalebar = ${CFG.SCALEBAR_UM} µm.`, W / 2, H - 28, FS, 'center', '#555');
-    const sec = $('#wf'); sec.classList.remove('hidden'); sec.innerHTML = '<h2>Workflow figure</h2><p class="sub">Built from the current image and Z slice with the current settings. Save it as a PNG for slides.</p><div class="btns"><button type="button" class="btn primary" id="wfSave">Save as PNG</button></div>';
-    cv.style.cssText = 'width:100%;height:auto;margin-top:10px;border:1px solid var(--line);border-radius:6px;background:#fff'; sec.appendChild(cv);
-    const tag = (m.labels[S.frame] || 'image').replace(/\s+/g, '_') + (m.Z > 1 ? `_Z${String(S.z + 1).padStart(3, '0')}` : '');
-    $('#wfSave').onclick = async () => { const blob = await new Promise(r => cv.toBlob(r, 'image/png')); saveBlob(`workflow_${tag}.png`, blob); };
-    setStatus(`${S.name} – workflow figure ready`); sec.scrollIntoView({ behavior: 'smooth' });
+    text(`Adjusted picture = (raw - strength x offset) / illumination map^strength. Raw and adjusted pictures use the display range (min/max) of the main view. Scalebar = ${CFG.SCALEBAR_UM} µm.`, W / 2, H - 28, FS, 'center', '#555');
+    if (scroll) $('#wf').scrollIntoView({ behavior: 'smooth' });
   } catch (e) { console.error(e); setStatus('Workflow figure failed: ' + e.message, 'error'); }
 }
 
@@ -1404,7 +1433,7 @@ async function startDataset(src, name) {
   await prepareEst(src, (i, n) => setStatus(`Sampling image ${i}/${n} for the illumination estimate …`, 'busy'));
   const C = m.C;
   S.frame = 0; S.z = Math.floor(m.Z / 2); S.sigma = 1; S.strength = 1; S.offset = 0; S.illumVer = 0;
-  S.want = new Array(C).fill('image'); S.detect = new Array(C).fill('bright'); $('#wf').classList.add('hidden'); S.share = new Array(C).fill(C > 1);
+  S.want = new Array(C).fill('image'); S.detect = new Array(C).fill('bright'); $('#wf').classList.add('hidden'); S.showWf = false; S.wfCanvas = null; S.hfreeze = []; S.share = new Array(C).fill(C > 1);
   S.luts = m.chNames.map((n, i) => guessLut(n, i)); S.lo = new Array(C).fill(0); S.hi = new Array(C).fill(1);
   await recomputeAll();
   $('#empty').classList.add('hidden'); $('#app').classList.remove('hidden'); $('#illum').classList.add('hidden');
