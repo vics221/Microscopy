@@ -1,0 +1,1430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ND2 viewer – flat-field corrected</title>
+<style>
+:root{
+  color-scheme: light dark;
+  --bg:#e8ebee; --panel:#f6f7f8; --ink:#13171b; --muted:#5d6670; --line:#cfd5db; --field:#ffffff;
+  --accent:#0a6a86; --accent-ink:#ffffff; --bad:#b3261e; --stage:#000;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1013; --panel:#161a1f; --ink:#e4e8ec; --muted:#97a1ab; --line:#2a3139; --field:#0f1215;
+    --accent:#52c4e2; --accent-ink:#06222b; --bad:#ff8a80;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1013; --panel:#161a1f; --ink:#e4e8ec; --muted:#97a1ab; --line:#2a3139; --field:#0f1215;
+  --accent:#52c4e2; --accent-ink:#06222b; --bad:#ff8a80;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px);}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.45 "Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:center;justify-content:space-between;
+  padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+h1{font-size:18px;margin:0;font-weight:650;letter-spacing:.1px}
+header p{margin:2px 0 0;color:var(--muted);font-size:12.5px;max-width:60ch}
+.actions{display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid var(--line);
+  background:var(--field);color:var(--ink);border-radius:6px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.btn:hover{border-color:var(--accent)}
+.btn:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+.btn.on{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.small{padding:3px 9px;font-size:12px}
+#status{padding:8px 20px;font-size:13px;color:var(--muted);min-height:34px;border-bottom:1px solid var(--line)}
+#status.error{color:var(--bad)}
+#status.busy::before{content:"";display:inline-block;width:10px;height:10px;margin-right:8px;border-radius:50%;
+  border:2px solid var(--accent);border-right-color:transparent;animation:spin .8s linear infinite;vertical-align:-1px}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){#status.busy::before{animation:none}}
+#empty{margin:28px 20px;border:2px dashed var(--line);border-radius:10px;padding:48px 20px;text-align:center;color:var(--muted)}
+#empty.drag{border-color:var(--accent);color:var(--ink)}
+#empty strong{display:block;color:var(--ink);font-size:16px;margin-bottom:6px}
+main{padding:14px 20px 40px}
+.toolbar{display:flex;flex-wrap:wrap;gap:10px 22px;align-items:flex-end;background:var(--panel);
+  border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin-bottom:14px}
+.ctl{display:flex;flex-direction:column;gap:3px;min-width:150px}
+.ctl label{font-size:12px;color:var(--muted)}
+.ctl .row{display:flex;gap:8px;align-items:center}
+.ctl output{font-variant-numeric:tabular-nums;min-width:3.6ch;text-align:right;font-size:12.5px}
+input[type=range]{width:160px;accent-color:var(--accent)}
+input[type=text],input[type=number]{background:var(--field);color:var(--ink);border:1px solid var(--line);border-radius:5px;
+  padding:4px 6px;font:inherit;font-size:13px;width:84px;font-variant-numeric:tabular-nums}
+.toolbar .btns{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
+.panels{display:grid;gap:12px;grid-template-columns:repeat(var(--cols),minmax(0,1fr))}
+@media (max-width:1000px){.panels{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:560px){.panels{grid-template-columns:minmax(0,1fr)}}
+.col{display:flex;flex-direction:column;gap:8px;min-width:0}
+.col h3{margin:0;font-size:13.5px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.imgwrap{position:relative;background:var(--stage);border-radius:6px;overflow:hidden;line-height:0}
+.imgwrap canvas{width:100%;height:auto;display:block}
+.imgwrap canvas.ov{position:absolute;inset:0;height:100%;pointer-events:none}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:9px;font-size:12.5px}
+.card h4{margin:0;font-size:12px;font-weight:600;color:var(--muted)}
+.luts{display:flex;flex-wrap:wrap;gap:5px}
+.luts button{width:22px;height:22px;border-radius:50%;border:2px solid transparent;cursor:pointer;padding:0}
+.luts button[aria-pressed=true]{border-color:var(--ink);box-shadow:0 0 0 2px var(--panel) inset}
+.bc{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.bc label{display:flex;gap:4px;align-items:center}
+.bc input{width:70px}
+canvas.hist{width:100%;height:64px;background:var(--field);border:1px solid var(--line);border-radius:4px}
+fieldset{border:0;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+legend{padding:0;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:3px}
+fieldset label,.chk{display:flex;gap:6px;align-items:center;cursor:pointer}
+.note{margin:0;color:var(--muted);font-size:11.5px}
+#illum,#wf{margin-top:18px}
+#wf h2{font-size:15px;margin:0 0 4px}
+#wf .sub{color:var(--muted);margin:0 0 10px;font-size:12.5px}
+#illum h2{font-size:15px;margin:0 0 4px}
+#illum .sub{color:var(--muted);margin:0 0 10px;font-size:12.5px}
+.igrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+.icard{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.icard h4{margin:0;font-size:12.5px;font-weight:600}
+.icard canvas{width:100%;height:auto;border-radius:4px}
+.bar{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>ND2 viewer – flat-field corrected</h1>
+    <p>Browse every Z slice per channel, correct uneven illumination and export figures. The file is read in your browser; nothing is uploaded.</p>
+  </div>
+  <div class="actions">
+    <label class="btn primary" for="file">Open .nd2 file</label>
+    <input type="file" id="file" accept=".nd2" hidden>
+    <button class="btn" id="demo" type="button">Try demo data</button>
+  </div>
+</header>
+<div id="status" role="status" aria-live="polite">Open an .nd2 file to begin.</div>
+
+<section id="empty">
+  <strong>Drop an .nd2 file here</strong>
+  Supports NIS-Elements ND2 version 3 files (uncompressed or lossless-compressed). No file at hand? Try the demo data.
+</section>
+
+<main id="app" class="hidden">
+  <div class="toolbar" id="toolbar"></div>
+  <div class="panels" id="panels"></div>
+  <section id="illum" class="hidden"></section>
+  <section id="wf" class="hidden"></section>
+</main>
+
+<input type="file" id="settingsFile" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* =====================================================================================
+   ALGORITHMS (no DOM) – port of the Python flat-field / object detection code
+   ===================================================================================== */
+const CFG = {
+  SCALEBAR_UM: 40, SB_THICK: 0.008, SB_MARGIN: 0.04,
+  FLAT_SMOOTH_FRAC: 0.15, FLAT_MAX_FRAMES: 40, FLAT_MIN: 0.3,
+  ITER: 2,
+  OBJ_MIN_DIAM_FRAC: 0.02, OBJ_MIN_ETA: 0.70, OBJ_THRESH_FRAC: 0.4, OBJ_EDGE_LEVEL: 0.5,
+  OBJ_MIN_SOL: 0.85, OBJ_MAX_AXIS: 2.5, EDGE_MARGIN_UM: 2.0, OBJ_MAX_PER_SLICE: 60,
+  DISPLAY_MAX: 1024, EST_TARGET: 256, EDGE_EST_TARGET: 512, MAX_SLICES_EDGE: 8,
+  OBJ_HOUGH_SIZE: 320, OBJ_RIM_WIDTH_UM: 1.5, OBJ_RIM_SENS: 4.0, OBJ_MAX_AREA_FRAC: 0.6, OBJ_ARC_SUPPORT: 0.60,
+  OBJ_MIN_COVERAGE: 0.85, OBJ_MIN_CONTRAST_SNR: 1.5, OBJ_RING_SOL: 0.90, OBJ_RING_AXIS: 1.5
+};
+const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
+
+function blockMean(a, W, H, f) {
+  if (f <= 1) return { d: Float32Array.from(a), w: W, h: H };
+  const w = Math.floor(W / f), h = Math.floor(H / f), o = new Float32Array(w * h), inv = 1 / (f * f);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let j = 0; j < f; j++) { const row = (y * f + j) * W + x * f; for (let i = 0; i < f; i++) s += a[row + i]; }
+    o[y * w + x] = s * inv;
+  }
+  return { d: o, w, h };
+}
+function gaussKernel(sigma) {
+  const r = Math.max(1, Math.ceil(sigma * 4)), k = new Float32Array(2 * r + 1);
+  let s = 0;
+  for (let i = -r; i <= r; i++) { const v = Math.exp(-i * i / (2 * sigma * sigma)); k[i + r] = v; s += v; }
+  for (let i = 0; i < k.length; i++) k[i] /= s;
+  return k;
+}
+function gaussian(a, w, h, sigma) {
+  if (sigma <= 0.01) return a;
+  const k = gaussKernel(sigma), r = (k.length - 1) >> 1;
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const o = y * w;
+    for (let x = 0; x < w; x++) {
+      let s = 0;
+      for (let i = -r; i <= r; i++) { const xx = x + i < 0 ? 0 : x + i >= w ? w - 1 : x + i; s += a[o + xx] * k[i + r]; }
+      tmp[o + x] = s;
+    }
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let s = 0;
+    for (let i = -r; i <= r; i++) { const yy = y + i < 0 ? 0 : y + i >= h ? h - 1 : y + i; s += tmp[yy * w + x] * k[i + r]; }
+    out[y * w + x] = s;
+  }
+  return out;
+}
+function resizeBilinear(a, w, h, w2, h2) {
+  const o = new Float32Array(w2 * h2), xs = new Float32Array(w2), x0 = new Int32Array(w2), x1 = new Int32Array(w2);
+  for (let x = 0; x < w2; x++) {
+    const sx = clamp((x + 0.5) * w / w2 - 0.5, 0, w - 1), i = Math.floor(sx);
+    x0[x] = i; x1[x] = Math.min(i + 1, w - 1); xs[x] = sx - i;
+  }
+  for (let y = 0; y < h2; y++) {
+    const sy = clamp((y + 0.5) * h / h2 - 0.5, 0, h - 1), j = Math.floor(sy), j1 = Math.min(j + 1, h - 1), fy = sy - j;
+    const r0 = j * w, r1 = j1 * w;
+    for (let x = 0; x < w2; x++) {
+      const fx = xs[x];
+      const top = a[r0 + x0[x]] * (1 - fx) + a[r0 + x1[x]] * fx;
+      const bot = a[r1 + x0[x]] * (1 - fx) + a[r1 + x1[x]] * fx;
+      o[y * w2 + x] = top * (1 - fy) + bot * fy;
+    }
+  }
+  return o;
+}
+function pctl(a, ps) {
+  const step = Math.max(1, Math.floor(a.length / 200000)), n = Math.ceil(a.length / step), t = new Float32Array(n);
+  for (let i = 0, j = 0; i < a.length; i += step) t[j++] = a[i];
+  t.sort();
+  return ps.map(p => { const q = clamp(p / 100 * (n - 1), 0, n - 1), i = Math.floor(q), f = q - i; return t[i] * (1 - f) + t[Math.min(i + 1, n - 1)] * f; });
+}
+function medianStack(arrs) {
+  const n = arrs[0].length, K = arrs.length, o = new Float32Array(n), t = new Float32Array(K);
+  for (let i = 0; i < n; i++) {
+    for (let k = 0; k < K; k++) t[k] = arrs[k][i];
+    t.sort();
+    o[i] = K & 1 ? t[K >> 1] : 0.5 * (t[K / 2 - 1] + t[K / 2]);
+  }
+  return o;
+}
+function otsu(vals) {
+  const [lo, hi] = pctl(vals, [0.5, 99.9]);
+  if (!(hi > lo)) return { t: null, eta: 0 };
+  const nb = 256, hist = new Float64Array(nb);
+  for (let i = 0; i < vals.length; i++) {
+    let b = Math.floor((clamp(vals[i], lo, hi) - lo) / (hi - lo) * nb); if (b >= nb) b = nb - 1; hist[b]++;
+  }
+  let tot = 0; for (let i = 0; i < nb; i++) tot += hist[i];
+  const p = Array.from(hist, v => v / Math.max(tot, 1)), cen = p.map((_, i) => lo + (i + 0.5) * (hi - lo) / nb);
+  let w0 = 0, m = 0, mt = 0; for (let i = 0; i < nb; i++) mt += p[i] * cen[i];
+  let best = -1, bk = 0;
+  for (let k = 0; k < nb; k++) {
+    w0 += p[k]; m += p[k] * cen[k];
+    const w1 = 1 - w0; if (w0 <= 0 || w1 <= 0) continue;
+    const b = (mt * w0 - m) ** 2 / (w0 * w1);
+    if (b > best) { best = b; bk = k; }
+  }
+  let vt = 0; for (let i = 0; i < nb; i++) vt += p[i] * (cen[i] - mt) ** 2;
+  return { t: lo + (bk + 1) * (hi - lo) / nb, eta: vt > 0 ? best / vt : 0 };
+}
+/* binary morphology (4-connected cross, border = background, like scipy defaults) */
+function dilate(m, w, h) {
+  const o = new Uint8Array(m);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    if (m[i]) { if (x > 0) o[i - 1] = 1; if (x < w - 1) o[i + 1] = 1; if (y > 0) o[i - w] = 1; if (y < h - 1) o[i + w] = 1; }
+  }
+  return o;
+}
+function erode(m, w, h) {
+  const o = new Uint8Array(w * h);
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x;
+    if (m[i] && m[i - 1] && m[i + 1] && m[i - w] && m[i + w]) o[i] = 1;
+  }
+  return o;
+}
+const dilateN = (m, w, h, n) => { for (let k = 0; k < n; k++) m = dilate(m, w, h); return m; };
+const erodeN = (m, w, h, n) => { for (let k = 0; k < n; k++) m = erode(m, w, h); return m; };
+const opening = (m, w, h, n) => dilateN(erodeN(m, w, h, n), w, h, n);
+function fillHoles(m, w, h) {
+  const vis = new Uint8Array(w * h), st = new Int32Array(w * h); let sp = 0;
+  const push = i => { if (!m[i] && !vis[i]) { vis[i] = 1; st[sp++] = i; } };
+  for (let x = 0; x < w; x++) { push(x); push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { push(y * w); push(y * w + w - 1); }
+  while (sp) {
+    const i = st[--sp], x = i % w, y = (i / w) | 0;
+    if (x > 0) push(i - 1); if (x < w - 1) push(i + 1); if (y > 0) push(i - w); if (y < h - 1) push(i + w);
+  }
+  const o = new Uint8Array(w * h); for (let i = 0; i < o.length; i++) o[i] = vis[i] ? 0 : 1;
+  return o;
+}
+function labelMask(m, w, h) {
+  const lab = new Int32Array(w * h), st = new Int32Array(w * h); let n = 0;
+  for (let i0 = 0; i0 < m.length; i0++) {
+    if (!m[i0] || lab[i0]) continue;
+    n++; let sp = 0; st[sp++] = i0; lab[i0] = n;
+    while (sp) {
+      const i = st[--sp], x = i % w, y = (i / w) | 0;
+      if (x > 0 && m[i - 1] && !lab[i - 1]) { lab[i - 1] = n; st[sp++] = i - 1; }
+      if (x < w - 1 && m[i + 1] && !lab[i + 1]) { lab[i + 1] = n; st[sp++] = i + 1; }
+      if (y > 0 && m[i - w] && !lab[i - w]) { lab[i - w] = n; st[sp++] = i - w; }
+      if (y < h - 1 && m[i + w] && !lab[i + w]) { lab[i + w] = n; st[sp++] = i + w; }
+    }
+  }
+  return { lab, n };
+}
+function groupPixels(lab, n) {
+  const start = new Int32Array(n + 2);
+  for (let i = 0; i < lab.length; i++) start[lab[i] + 1]++;
+  for (let l = 0; l <= n; l++) start[l + 1] += start[l];
+  const pos = start.slice(), order = new Int32Array(lab.length);
+  for (let i = 0; i < lab.length; i++) order[pos[lab[i]]++] = i;
+  return { order, start };
+}
+function hullArea(pts) {
+  pts.sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const cross = (o, a, b) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  const lo = [], up = [];
+  for (const p of pts) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = pts.length - 1; i >= 0; i--) { const p = pts[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  lo.pop(); up.pop();
+  const hull = lo.concat(up); let a = 0;
+  for (let i = 0; i < hull.length; i++) { const p = hull[i], q = hull[(i + 1) % hull.length]; a += p[0] * q[1] - q[0] * p[1]; }
+  return Math.abs(a) / 2;
+}
+/* roundness of one object: solidity (area / convex hull) and axis ratio; border = cut by image edge */
+function shapeMetrics(px, s, e, lab, l, w, h, bo) {
+  const n = e - s; let mx = 0, my = 0, border = false;
+  for (let k = s; k < e; k++) { const i = px[k], x = i % w, y = (i / w) | 0; mx += x; my += y; if (x === 0 || y === 0 || x === w - 1 || y === h - 1) border = true; }
+  mx /= n; my /= n; if (bo !== undefined) border = bo;
+  if (n < 5) return { solidity: 1, ratio: 1, border };
+  let sxx = 0, syy = 0, sxy = 0; const pts = [];
+  for (let k = s; k < e; k++) {
+    const i = px[k], x = i % w, y = (i / w) | 0;
+    sxx += (x - mx) ** 2; syy += (y - my) ** 2; sxy += (x - mx) * (y - my);
+    const edge = x === 0 || y === 0 || x === w - 1 || y === h - 1 || lab[i - 1] !== l || lab[i + 1] !== l || lab[i - w] !== l || lab[i + w] !== l;
+    if (edge) for (const dy of [-0.5, 0.5]) for (const dx of [-0.5, 0.5]) pts.push([x + dx, y + dy]);
+  }
+  sxx /= n - 1; syy /= n - 1; sxy /= n - 1;
+  const tr = (sxx + syy) / 2, df = Math.sqrt(((sxx - syy) / 2) ** 2 + sxy * sxy);
+  const ratio = Math.sqrt(Math.max(tr + df, 1e-9) / Math.max(tr - df, 1e-9));
+  let sol = 1; try { const ha = hullArea(pts); sol = ha > 0 ? n / ha : 1; } catch (_) {}
+  return { solidity: Math.min(sol, 1), ratio, border };
+}
+/* objects brighter than the background; edge at half of the object's own brightness; smooth, compact shapes accepted */
+function segmentBright(img, w, h) {
+  const empty = { lab: new Int32Array(w * h), acc: new Uint8Array(1), n: 0 };
+  const sm = gaussian(img, w, h, 1.0);
+  const sub = new Float32Array(Math.ceil(h / 2) * Math.ceil(w / 2)); let q = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) sub[q++] = sm[y * w + x];
+  const { t: t0, eta } = otsu(sub.subarray(0, q));
+  if (t0 == null || eta < CFG.OBJ_MIN_ETA) return empty;
+  const bgv = []; for (let i = 0; i < sub.length && i < q; i++) if (sub[i] <= t0) bgv.push(sub[i]);
+  bgv.sort((a, b) => a - b);
+  const bg = bgv.length ? bgv[bgv.length >> 1] : 0;
+  const t = bg + CFG.OBJ_THRESH_FRAC * (t0 - bg);
+  let mask = new Uint8Array(w * h); for (let i = 0; i < mask.length; i++) mask[i] = sm[i] > t ? 1 : 0;
+  mask = fillHoles(opening(mask, w, h, 1), w, h);
+  let L = labelMask(mask, w, h); if (!L.n) return empty;
+  const g = groupPixels(L.lab, L.n), refined = new Uint8Array(w * h);
+  for (let l = 1; l <= L.n; l++) {
+    const s = g.start[l], e = g.start[l + 1], vals = new Float32Array(e - s);
+    for (let k = s; k < e; k++) vals[k - s] = sm[g.order[k]];
+    const plateau = pctl(vals, [75])[0], thr = Math.max(t, bg + CFG.OBJ_EDGE_LEVEL * (plateau - bg));
+    for (let k = s; k < e; k++) { const i = g.order[k]; if (sm[i] > thr) refined[i] = 1; }
+  }
+  const nOpen = Math.max(1, Math.round(Math.max(h, w) / 600));
+  L = labelMask(fillHoles(opening(refined, w, h, nOpen), w, h), w, h);
+  if (!L.n) return empty;
+  const minArea = Math.PI / 4 * (CFG.OBJ_MIN_DIAM_FRAC * Math.max(h, w)) ** 2;
+  const g2 = groupPixels(L.lab, L.n), acc = new Uint8Array(L.n + 1), lab = L.lab;
+  for (let l = 1; l <= L.n; l++) {
+    const s = g2.start[l], e = g2.start[l + 1];
+    if (e - s < minArea) { for (let k = s; k < e; k++) lab[g2.order[k]] = 0; continue; }
+    const m = shapeMetrics(g2.order, s, e, lab, l, w, h);
+    acc[l] = (m.solidity >= CFG.OBJ_MIN_SOL && (m.border || m.ratio <= CFG.OBJ_MAX_AXIS)) ? 1 : 0;
+  }
+  return { lab, acc, n: L.n };
+}
+/* ---- dark-outline ("edge") detection: circles from broken outlines + closed rings ---- */
+function maxMinFilter(a, w, h, r, isMax) {
+  const tmp = new Float32Array(w * h), out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = isMax ? -Infinity : Infinity;
+    for (let i = -r; i <= r; i++) { const q = a[y * w + clamp(x + i, 0, w - 1)]; v = isMax ? (q > v ? q : v) : (q < v ? q : v); }
+    tmp[y * w + x] = v;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let v = isMax ? -Infinity : Infinity;
+    for (let i = -r; i <= r; i++) { const q = tmp[clamp(y + i, 0, h - 1) * w + x]; v = isMax ? (q > v ? q : v) : (q < v ? q : v); }
+    out[y * w + x] = v;
+  }
+  return out;
+}
+function segmentRings(img, w, h, rimPx) {
+  const empty = { lab: new Int32Array(w * h), acc: new Uint8Array(1), n: 0 };
+  const rim = Math.max(1, Math.floor(rimPx)), sm = gaussian(img, w, h, Math.max(0.7, 0.5 * rim));
+  const r = rim + 1, cl = maxMinFilter(maxMinFilter(sm, w, h, r, true), w, h, r, false);
+  const th = new Float32Array(w * h); for (let i = 0; i < th.length; i++) th[i] = cl[i] - sm[i];
+  const med = pctl(th, [50])[0], dev = new Float32Array(th.length); for (let i = 0; i < th.length; i++) dev[i] = Math.abs(th[i] - med);
+  const mad = 1.4826 * pctl(dev, [50])[0] + 1e-9, p999 = pctl(th, [99.9])[0];
+  const t = Math.max(med + CFG.OBJ_RIM_SENS * mad, med + 0.15 * (p999 - med));
+  const pad = rim + 2, W2 = w + 2 * pad, H2 = h + 2 * pad, pm = new Uint8Array(W2 * H2);
+  for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) pm[y * W2 + x] = th[clamp(y - pad, 0, h - 1) * w + clamp(x - pad, 0, w - 1)] > t ? 1 : 0;
+  const cm = erodeN(dilateN(pm, W2, H2, rim + 1), W2, H2, rim + 1), free = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) free[y * w + x] = cm[(y + pad) * W2 + x + pad] ? 0 : 1;
+  const L = labelMask(free, w, h); if (!L.n) return empty;
+  const g = groupPixels(L.lab, L.n), minArea = Math.PI / 4 * (CFG.OBJ_MIN_DIAM_FRAC * Math.max(h, w)) ** 2, maxArea = CFG.OBJ_MAX_AREA_FRAC * h * w, cands = [];
+  for (let l = 1; l <= L.n; l++) { const a = g.start[l + 1] - g.start[l]; if (a >= minArea && a <= maxArea) cands.push([a, l]); }
+  cands.sort((p, q) => q[0] - p[0]);
+  const out = new Int32Array(w * h); let nOut = 0;
+  for (const [, l] of cands) {
+    let x0 = w, x1 = -1, y0 = h, y1 = -1;
+    for (let k = g.start[l]; k < g.start[l + 1]; k++) { const i = g.order[k], x = i % w, y = (i / w) | 0; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    const cw = x1 - x0 + 1, ch = y1 - y0 + 1, cmk = new Uint8Array(cw * ch);
+    for (let k = g.start[l]; k < g.start[l + 1]; k++) { const i = g.order[k]; cmk[((i / w | 0) - y0) * cw + (i % w) - x0] = 1; }
+    const fm = fillHoles(cmk, cw, ch), idx = []; for (let i = 0; i < fm.length; i++) if (fm[i]) idx.push(i);
+    const border = x0 === 0 || y0 === 0 || x1 === w - 1 || y1 === h - 1;
+    const sh = shapeMetrics(Int32Array.from(idx), 0, idx.length, fm, 1, cw, ch, border);
+    if (sh.solidity >= CFG.OBJ_RING_SOL && (border || sh.ratio <= CFG.OBJ_RING_AXIS)) {
+      nOut++; for (const i of idx) out[(y0 + ((i / cw) | 0)) * w + x0 + (i % cw)] = nOut;
+    }
+  }
+  const acc = new Uint8Array(nOut + 1).fill(1); acc[0] = 0;
+  return { lab: out, acc, n: nOut };
+}
+function bilNaN(a, w, h, y, x) {
+  if (!(y >= 0 && y <= h - 1 && x >= 0 && x <= w - 1)) return NaN;
+  const j = Math.floor(y), i = Math.floor(x), j1 = Math.min(j + 1, h - 1), i1 = Math.min(i + 1, w - 1), fy = y - j, fx = x - i;
+  return (a[j * w + i] * (1 - fx) + a[j * w + i1] * fx) * (1 - fy) + (a[j1 * w + i] * (1 - fx) + a[j1 * w + i1] * fx) * fy;
+}
+function lensArea(a, b) {
+  const [y1, x1, r1] = a, [y2, x2, r2] = b, dd = Math.hypot(y1 - y2, x1 - x2);
+  if (dd >= r1 + r2) return 0;
+  if (dd <= Math.abs(r1 - r2)) return Math.PI * Math.min(r1, r2) ** 2;
+  const a1 = Math.acos(clamp((dd * dd + r1 * r1 - r2 * r2) / (2 * dd * r1), -1, 1)), a2 = Math.acos(clamp((dd * dd + r2 * r2 - r1 * r1) / (2 * dd * r2), -1, 1));
+  return r1 * r1 * (a1 - Math.sin(2 * a1) / 2) + r2 * r2 * (a2 - Math.sin(2 * a2) / 2);
+}
+function circlesConflict(a, b) {
+  const inter = lensArea(a, b); if (inter <= 0) return false;
+  const small = Math.PI * Math.min(a[2], b[2]) ** 2;
+  if (inter / small >= 0.95) return inter / (Math.PI * Math.max(a[2], b[2]) ** 2) > 0.7;
+  return inter / small > 0.12;
+}
+/* circular Hough transform (gradient-direction voting) + check that the outline is darker than inside and outside */
+function segmentCircles(img, w0, h0, rimPx) {
+  const empty = { lab: new Int32Array(w0 * h0), acc: new Uint8Array(1), n: 0 };
+  const f = Math.min(1, CFG.OBJ_HOUGH_SIZE / Math.max(h0, w0));
+  let w = w0, h = h0, small = img;
+  if (f < 1) { w = Math.max(8, Math.round(w0 * f)); h = Math.max(8, Math.round(h0 * f)); small = resizeBilinear(img, w0, h0, w, h); }
+  const rim = Math.max(1, rimPx * f), sm = gaussian(small, w, h, Math.max(1, 0.8 * rim)), bgl = gaussian(sm, w, h, 0.05 * Math.max(h, w));
+  const rel = new Float32Array(w * h); for (let i = 0; i < rel.length; i++) rel[i] = sm[i] / Math.max(bgl[i], 1e-6) - 1;
+  const gy = new Float32Array(w * h), gx = new Float32Array(w * h), mag = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const i = y * w + x;
+    gy[i] = y === 0 ? rel[i + w] - rel[i] : y === h - 1 ? rel[i] - rel[i - w] : (rel[i + w] - rel[i - w]) / 2;
+    gx[i] = x === 0 ? rel[i + 1] - rel[i] : x === w - 1 ? rel[i] - rel[i - 1] : (rel[i + 1] - rel[i - 1]) / 2;
+    mag[i] = Math.hypot(gy[i], gx[i]);
+  }
+  const thr = pctl(mag, [85])[0], ey = [], ex = [], uy = [], ux = [];
+  for (let i = 0; i < mag.length; i++) if (mag[i] > thr) { ey.push((i / w) | 0); ex.push(i % w); uy.push(gy[i] / mag[i]); ux.push(gx[i] / mag[i]); }
+  if (ey.length < 50) return empty;
+  const rMin = Math.max(4, 0.5 * CFG.OBJ_MIN_DIAM_FRAC * Math.max(h, w)), rMax = 0.35 * Math.min(h, w);
+  if (rMax <= rMin + 1) return empty;
+  const radii = [...new Set(Array.from({ length: 40 }, (_, i) => Math.round(rMin * Math.pow(rMax / rMin, i / 39))))];
+  const pad = Math.floor(rMax / 2), H2 = h + 2 * pad, W2 = w + 2 * pad, plane = H2 * W2, R = radii.length, acc = new Float32Array(R * plane);
+  for (let k = 0; k < R; k++) for (const sg of [1, -1]) for (let j = 0; j < ey.length; j++) {
+    const cy = Math.round(ey[j] + sg * radii[k] * uy[j]) + pad, cx = Math.round(ex[j] + sg * radii[k] * ux[j]) + pad;
+    if (cy >= 0 && cy < H2 && cx >= 0 && cx < W2) acc[k * plane + cy * W2 + cx]++;
+  }
+  const sigV = 1.2, support = new Float32Array(R * plane);
+  for (let k = 0; k < R; k++) { const sg = gaussian(acc.slice(k * plane, (k + 1) * plane), W2, H2, sigV), s = sigV * sigV / radii[k]; for (let i = 0; i < plane; i++) support[k * plane + i] = sg[i] * s; }
+  const peaks = [];
+  for (let k = 0; k < R; k++) for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+    const s = support[k * plane + y * W2 + x]; if (s <= CFG.OBJ_ARC_SUPPORT) continue;
+    let ok = true;
+    outer: for (let kk = Math.max(0, k - 1); kk <= Math.min(R - 1, k + 1); kk++) for (let yy = Math.max(0, y - 2); yy <= Math.min(H2 - 1, y + 2); yy++) for (let xx = Math.max(0, x - 2); xx <= Math.min(W2 - 1, x + 2); xx++)
+      if (support[kk * plane + yy * W2 + xx] > s) { ok = false; break outer; }
+    if (ok) peaks.push([s, k, y, x]);
+  }
+  if (!peaks.length) return empty;
+  peaks.sort((a, b) => b[0] - a[0]); peaks.length = Math.min(peaks.length, 600);
+  const sm2 = gaussian(rel, w, h, 2.0), nd = []; for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) nd.push(Math.abs(rel[y * w + x] - sm2[y * w + x]));
+  const noise = 1.4826 * pctl(Float32Array.from(nd), [50])[0] + 1e-9, d = Math.max(1.5, 1.2 * rim), NT = 72, st = [], ct = [];
+  for (let i = 0; i < NT; i++) { st.push(Math.sin(2 * Math.PI * i / NT)); ct.push(Math.cos(2 * Math.PI * i / NT)); }
+  const ringContrast = (cy, cx, r) => {
+    let n = 0, sum = 0, pos = 0;
+    for (let i = 0; i < NT; i++) {
+      const a = bilNaN(rel, w, h, cy + (r - d) * st[i], cx + (r - d) * ct[i]), b = bilNaN(rel, w, h, cy + r * st[i], cx + r * ct[i]), c = bilNaN(rel, w, h, cy + (r + d) * st[i], cx + (r + d) * ct[i]);
+      if (isFinite(a) && isFinite(b) && isFinite(c)) { const v = 0.5 * (a + c) - b; n++; sum += v; if (v > 0) pos++; }
+    }
+    return (n < 0.35 * NT || n < 12) ? [-1, 0] : [sum / n, pos / n];
+  };
+  let circles = [];
+  for (const [s, k, y0, x0] of peaks) {
+    const cy = y0 - pad, cx = x0 - pad; let best = null;
+    for (let q = 0; q < 11; q++) {
+      const dr = -2.5 * d + 5 * d * q / 10; if (radii[k] + dr <= 2) continue;
+      const [cm, fr] = ringContrast(cy, cx, radii[k] + dr); if (!best || cm > best.cm) best = { cm, fr, dr };
+    }
+    if (!best || best.fr < CFG.OBJ_MIN_COVERAGE || best.cm < CFG.OBJ_MIN_CONTRAST_SNR * noise) continue;
+    circles.push([s * best.fr, cy, cx, radii[k] + best.dr]);
+  }
+  circles.sort((a, b) => b[0] - a[0]);
+  const kept = [];
+  for (const c of circles) if (!kept.some(k2 => circlesConflict([c[1], c[2], c[3]], [k2[1], k2[2], k2[3]]))) kept.push(c);
+  if (!kept.length) return empty;
+  const out = new Int32Array(w0 * h0); kept.sort((a, b) => b[3] - a[3]);
+  kept.forEach((c, i) => {
+    const cy0 = c[1] * h0 / h, cx0 = c[2] * w0 / w, rr = c[3] * w0 / w;
+    const ya = Math.max(0, Math.floor(cy0 - rr) - 1), yb = Math.min(h0, Math.floor(cy0 + rr) + 2), xa = Math.max(0, Math.floor(cx0 - rr) - 1), xb = Math.min(w0, Math.floor(cx0 + rr) + 2);
+    for (let y = ya; y < yb; y++) for (let x = xa; x < xb; x++) if ((y - cy0) ** 2 + (x - cx0) ** 2 <= rr * rr) out[y * w0 + x] = i + 1;
+  });
+  const acc2 = new Uint8Array(kept.length + 1).fill(1); acc2[0] = 0;
+  return { lab: out, acc: acc2, n: kept.length };
+}
+function segmentByEdge(img, w, h, rimPx) {
+  const c = segmentCircles(img, w, h, rimPx), r = segmentRings(img, w, h, rimPx), out = c.lab.slice(); let n = c.n;
+  const g = groupPixels(r.lab, r.n);
+  for (let l = 1; l <= r.n; l++) {
+    const s = g.start[l], e = g.start[l + 1]; if (e <= s) continue;
+    let ov = 0; for (let k = s; k < e; k++) if (c.lab[g.order[k]] > 0) ov++;
+    if (ov < 0.3 * (e - s)) { n++; for (let k = s; k < e; k++) { const i = g.order[k]; if (!c.lab[i]) out[i] = n; } }
+  }
+  const acc = new Uint8Array(n + 1).fill(1); acc[0] = 0;
+  return { lab: out, acc, n };
+}
+/* objects found in other channels (same bubbles) are added where this channel found nothing */
+function mergeObjects(own, others) {
+  const out = own.lab.slice(); let n = 0;
+  for (let i = 0; i < out.length; i++) if (out[i] > n) n = out[i];
+  const acc = new Uint8Array(n + 1), fromOther = new Uint8Array(n + 1);
+  acc.set(own.acc.subarray(0, Math.min(own.acc.length, n + 1)));
+  let accArr = Array.from(acc), fo = Array.from(fromOther);
+  for (const o of others) {
+    const g = groupPixels(o.lab, o.n || (o.acc.length - 1));
+    const nn = g.start.length - 2;
+    for (let l = 1; l <= nn; l++) {
+      const s = g.start[l], e = g.start[l + 1]; if (e <= s) continue;
+      let ov = 0; for (let k = s; k < e; k++) if (out[g.order[k]] > 0) ov++;
+      if (ov >= 0.3 * (e - s)) continue;
+      n++;
+      for (let k = s; k < e; k++) { const i = g.order[k]; if (!out[i]) out[i] = n; }
+      accArr[n] = o.acc[l] ? 1 : 0; fo[n] = 1;
+    }
+  }
+  while (accArr.length < n + 1) accArr.push(0);
+  while (fo.length < n + 1) fo.push(0);
+  return { lab: out, acc: Uint8Array.from(accArr), fromOther: Uint8Array.from(fo), n };
+}
+/* illumination model: [1], [x, y], r^2, r^4 */
+const _basisCache = {};
+function basis(w, h) {
+  const key = w + 'x' + h; if (_basisCache[key]) return _basisCache[key];
+  const n = w * h, one = new Float32Array(n).fill(1), x = new Float32Array(n), y = new Float32Array(n), r2 = new Float32Array(n), r4 = new Float32Array(n);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    const k = j * w + i, xx = i / Math.max(w - 1, 1) * 2 - 1, yy = j / Math.max(h - 1, 1) * 2 - 1, r = xx * xx + yy * yy;
+    x[k] = xx; y[k] = yy; r2[k] = r; r4[k] = r * r;
+  }
+  return (_basisCache[key] = { one, x, y, r2, r4 });
+}
+function solveLin(A, b, m) {
+  const M = []; for (let i = 0; i < m; i++) { M.push(Array.from(A.subarray(i * m, i * m + m))); M[i].push(b[i]); M[i][i] += 1e-12; }
+  for (let c = 0; c < m; c++) {
+    let p = c; for (let r = c + 1; r < m; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]];
+    const d = M[c][c] || 1e-12;
+    for (let r = 0; r < m; r++) if (r !== c) { const f = M[r][c] / d; for (let k = c; k <= m; k++) M[r][k] -= f * M[c][k]; }
+  }
+  return Float64Array.from(M.map((r, i) => r[m] / (r[i] || 1e-12)));
+}
+function robustFit(A, y, n, m) {
+  let mask = new Uint8Array(n).fill(1), coef = new Float64Array(m);
+  for (let it = 0; it < 6; it++) {
+    const AtA = new Float64Array(m * m), Aty = new Float64Array(m);
+    for (let i = 0; i < n; i++) if (mask[i]) {
+      for (let a = 0; a < m; a++) { const va = A[i * m + a]; Aty[a] += va * y[i]; for (let b = a; b < m; b++) AtA[a * m + b] += va * A[i * m + b]; }
+    }
+    for (let a = 0; a < m; a++) for (let b = 0; b < a; b++) AtA[a * m + b] = AtA[b * m + a];
+    coef = solveLin(AtA, Aty, m);
+    const res = new Float64Array(n), sel = [];
+    for (let i = 0; i < n; i++) { let s = 0; for (let a = 0; a < m; a++) s += coef[a] * A[i * m + a]; res[i] = y[i] - s; if (mask[i]) sel.push(res[i]); }
+    const sa = Float64Array.from(sel).sort(), med = sa[sa.length >> 1];
+    const dev = Float64Array.from(sa, v => Math.abs(v - med)).sort();
+    const sig = 1.4826 * dev[dev.length >> 1] + 1e-12;
+    const nm = new Uint8Array(n); let cnt = 0, same = true;
+    for (let i = 0; i < n; i++) { nm[i] = Math.abs(res[i]) < 2.5 * sig ? 1 : 0; cnt += nm[i]; if (nm[i] !== mask[i]) same = false; }
+    if (cnt < 0.3 * n || same) break;
+    mask = nm;
+  }
+  return coef;
+}
+
+/* ---- dataset state (shared by algorithms and UI) ---- */
+const S = { detCache: new Map() };
+
+const rimPx = G => Math.max(1, Math.round(CFG.OBJ_RIM_WIDTH_UM / Math.max(G.px, 1e-6)));
+function segmentObjects(img, w, h, kind, rim) { return kind === 'edge' ? segmentByEdge(img, w, h, rim) : segmentBright(img, w, h); }
+function flatSig(f) { return [f[0], f[f.length >> 1], f[f.length - 1], f[f.length >> 2]].map(v => v.toFixed(5)).join(','); }
+function detectCached(G, kind, chan, k, dark, flat, img) {
+  const key = G.name + '|' + kind + '|' + chan + '|' + k + '|' + dark + '|' + flatSig(flat);
+  if (S.detCache.has(key)) return S.detCache.get(key);
+  if (S.detCache.size > 700) S.detCache.clear();
+  const r = segmentObjects(img, G.w, G.h, kind, rimPx(G)); S.detCache.set(key, r); return r;
+}
+function flattenImg(arr, dark, flat) {
+  const o = new Float32Array(arr.length);
+  for (let i = 0; i < o.length; i++) o[i] = Math.max(arr[i] - dark, 0) / flat[i];
+  return o;
+}
+/* illumination map from background pixels only, or from inside round objects only.
+   Dark-edge detection works on a finer grid (S.gE) and uses fewer images, like the Python version. */
+function fitMasked(c, mode, others, dark, detect) {
+  const anyEdge = detect === 'edge' || others.some(o => o.kind === 'edge');
+  const G = anyEdge && S.gE ? S.gE : S.gA, w = G.w, h = G.h, n = w * h, K = G.ids.length;
+  const edgePx = Math.max(1, Math.round(CFG.EDGE_MARGIN_UM / Math.max(G.px, 1e-6)));
+  const B = basis(w, h), tilt = mode === 'background';
+  const terms = tilt ? [B.one, B.x, B.y, B.r2, B.r4] : [B.one, B.r2, B.r4];
+  const oFlat = others.map(o => G === S.gA ? o.flat : resizeBilinear(o.flat, S.ew, S.eh, w, h));
+  const oth = others.length ? G.ids.map((_, k) => others.map((o, j) => detectCached(G, o.kind, o.chan, k, o.dark, oFlat[j], flattenImg(G.stack[o.chan][k], o.dark, oFlat[j])))) : null;
+  let flatS = new Float32Array(n).fill(1), nUsed = 0, bgMed = 0;
+  const nIter = detect === 'edge' ? 1 : CFG.ITER;
+  for (let it = 0; it < nIter; it++) {
+    const groups = [], used = new Uint8Array(n);
+    for (let k = 0; k < K; k++) {
+      const raw = G.stack[c][k], img = new Float32Array(n);
+      for (let i = 0; i < n; i++) img[i] = Math.max(raw[i] - dark, 0);
+      const fl = new Float32Array(n); for (let i = 0; i < n; i++) fl[i] = img[i] / flatS[i];
+      let { lab, acc } = detectCached(G, detect, c, k, dark, flatS, fl);
+      if (oth) { const m = mergeObjects({ lab, acc }, oth[k]); lab = m.lab; acc = m.acc; }
+      if (tilt) {
+        const fg = new Uint8Array(n); for (let i = 0; i < n; i++) fg[i] = lab[i] > 0 ? 1 : 0;
+        const fd = dilateN(fg, w, h, edgePx), sel = [];
+        for (let i = 0; i < n; i++) if (!fd[i]) sel.push(i);
+        if (sel.length < 200) continue;
+        const stride = Math.max(1, Math.floor(sel.length / 10000)), idx = [];
+        for (let j = 0; j < sel.length; j += stride) idx.push(sel[j]);
+        const I = Int32Array.from(idx), y = new Float32Array(I.length);
+        for (let j = 0; j < I.length; j++) { y[j] = img[I[j]]; used[I[j]] = 1; }
+        groups.push({ idx: I, y });
+      } else {
+        const ok = new Uint8Array(n); let mx = 0;
+        for (let i = 0; i < n; i++) { if (lab[i] > mx) mx = lab[i]; ok[i] = lab[i] > 0 && acc[lab[i]] ? 1 : 0; }
+        const er = erodeN(ok, w, h, edgePx), lab2 = new Int32Array(n);
+        for (let i = 0; i < n; i++) if (er[i]) lab2[i] = lab[i];
+        const g = groupPixels(lab2, mx), cand = [];
+        for (let l = 1; l <= mx; l++) if (g.start[l + 1] - g.start[l] >= 20) cand.push(l);
+        cand.sort((a, b) => (g.start[b + 1] - g.start[b]) - (g.start[a + 1] - g.start[a]));
+        let imax = 0; for (let i = 0; i < n; i++) if (img[i] > imax) imax = img[i];
+        const eps = 1e-3 * imax + 1e-6;
+        for (const l of cand.slice(0, CFG.OBJ_MAX_PER_SLICE)) {
+          const I = g.order.slice(g.start[l], g.start[l + 1]), y = new Float32Array(I.length);
+          for (let j = 0; j < I.length; j++) { y[j] = Math.log(Math.max(img[I[j]], eps)); used[I[j]] = 1; }
+          groups.push({ idx: I, y, demean: true });
+        }
+      }
+    }
+    const total = groups.reduce((s, g) => s + g.idx.length, 0);
+    nUsed = total;
+    if (total < 500) return { flat: null, note: `too few ${mode} pixels found (${total})` };
+    const tt = tilt ? terms : terms.slice(1), m = tt.length;
+    const A = new Float64Array(total * m), Y = new Float64Array(total);
+    let r = 0;
+    for (const g of groups) {
+      const L = g.idx.length; let ym = 0; const am = new Float64Array(m);
+      if (g.demean) {
+        for (let j = 0; j < L; j++) { ym += g.y[j]; for (let a = 0; a < m; a++) am[a] += tt[a][g.idx[j]]; }
+        ym /= L; for (let a = 0; a < m; a++) am[a] /= L;
+      }
+      for (let j = 0; j < L; j++) { for (let a = 0; a < m; a++) A[(r + j) * m + a] = tt[a][g.idx[j]] - am[a]; Y[r + j] = g.y[j] - ym; }
+      r += L;
+    }
+    const coef = robustFit(A, Y, total, m);
+    const surf = new Float32Array(n); let smax = -Infinity;
+    for (let i = 0; i < n; i++) { let s = 0; for (let a = 0; a < m; a++) s += coef[a] * tt[a][i]; surf[i] = tilt ? s : Math.exp(s); if (surf[i] > smax) smax = surf[i]; }
+    if (tilt) { const fl = 1e-3 * Math.max(smax, 1e-6); for (let i = 0; i < n; i++) if (surf[i] < fl) surf[i] = fl; }
+    const uv = []; for (let i = 0; i < n; i++) if (used[i]) uv.push(surf[i]);
+    if (uv.length > 200) {
+      const [lg, hg] = pctl(Float32Array.from(uv), [1, 99]);
+      for (let i = 0; i < n; i++) surf[i] = clamp(surf[i], 0.85 * lg, 1.15 * hg);
+    }
+    let mean = 0; for (let i = 0; i < n; i++) mean += surf[i]; mean /= n;
+    flatS = new Float32Array(n); for (let i = 0; i < n; i++) flatS[i] = clamp(surf[i] / mean, 0.1, 10);
+    if (tilt) { const sY = Float64Array.from(Y).sort(); bgMed = sY[sY.length >> 1]; }
+  }
+  if (G !== S.gA) flatS = resizeBilinear(flatS, w, h, S.ew, S.eh);
+  let mean = 0; for (let i = 0; i < flatS.length; i++) mean += flatS[i]; mean /= flatS.length;
+  for (let i = 0; i < flatS.length; i++) flatS[i] /= Math.max(mean, 1e-6);
+  let note = `${nUsed} ${mode} pixels used` + (others.length ? ' (objects of all channels masked)' : '');
+  if (tilt) {
+    const all = new Float32Array(G.stack[c][0].length); for (let i = 0; i < all.length; i++) all[i] = Math.max(G.stack[c][0][i] - dark, 0);
+    if (bgMed < 0.05 * Math.max(pctl(all, [99.5])[0], 1e-6)) note += '; warning: background carries almost no signal in this channel – the map may be noisy, consider "objects"';
+  }
+  return { flat: flatS, note };
+}
+/* mode: "image" | "background" | "objects"; detect: "bright" | "edge" */
+function estimateFlat(c, mode, others, dark, detect = 'bright') {
+  const w = S.ew, h = S.eh, d = dark == null ? 0 : dark, base = S.base[c];
+  const bsub = new Float32Array(base.length); let bm = 0;
+  for (let i = 0; i < bsub.length; i++) { const v = Math.max(base[i] - d, 0); bsub[i] = v; bm += v; }
+  bm /= bsub.length;
+  let flat = null, smooth = null, note = '', used = 'image';
+  if (mode === 'background' || mode === 'objects') {
+    const r = fitMasked(c, mode, others || [], d, detect);
+    if (r.flat) { flat = r.flat; note = r.note; used = mode; smooth = flat.map(v => v * bm + d); }
+    else note = r.note + ' – used the whole-image method instead';
+  }
+  if (!flat) {
+    const f4 = 4, rs = blockMean(bsub, w, h, f4);
+    const bl = resizeBilinear(gaussian(rs.d, rs.w, rs.h, CFG.EST_TARGET * CFG.FLAT_SMOOTH_FRAC / f4), rs.w, rs.h, w, h);
+    let m = 0; for (let i = 0; i < bl.length; i++) m += bl[i]; m /= bl.length;
+    flat = bl.map(v => v / Math.max(m, 1e-6)); smooth = bl.map(v => v + d);
+  }
+  flat = flat.map(v => Math.max(v, CFG.FLAT_MIN));
+  return { dark: d, flat, smooth, mode: used, note, base, detect };
+}
+const sourcesFor = (c, illum) => illum.map((o, j) => ({ chan: j, kind: S.detect[j], dark: o.dark, flat: o.flat })).filter(o => o.chan !== c);
+
+/* ---- geometry + sampling of frames for the illumination estimate ---- */
+function setGeometry(meta) {
+  const { W, H } = meta;
+  S.meta = meta;
+  S.ds = Math.max(1, Math.ceil(Math.max(W, H) / CFG.DISPLAY_MAX));
+  S.dw = Math.floor(W / S.ds); S.dh = Math.floor(H / S.ds);
+  S.fe = Math.max(1, Math.floor(Math.min(W, H) / CFG.EST_TARGET));
+  S.ew = Math.floor(W / S.fe); S.eh = Math.floor(H / S.fe);
+  S.feE = Math.max(1, Math.floor(Math.min(W, H) / CFG.EDGE_EST_TARGET)); S.eeW = Math.floor(W / S.feE); S.eeH = Math.floor(H / S.feE);
+  updatePixelSize(meta.pxUm);
+}
+function updatePixelSize(px) {
+  S.meta.pxUm = px; S.pxView = px * S.ds; S.pxEst = px * S.fe; S.pxEstE = px * S.feE;
+  if (S.gA) S.gA.px = S.pxEst; if (S.gE) S.gE.px = S.pxEstE;
+}
+async function prepareEst(src, progress) {
+  const m = src.meta, total = m.N * m.Z, K = Math.min(total, CFG.FLAT_MAX_FRAMES);
+  const ids = []; for (let i = 0; i < K; i++) { const v = K === 1 ? 0 : Math.round(i * (total - 1) / (K - 1)); if (!ids.includes(v)) ids.push(v); }
+  S.ids = ids; S.est = Array.from({ length: m.C }, () => []);
+  S.detCache.clear();
+  for (let k = 0; k < ids.length; k++) {
+    progress && progress(k + 1, ids.length);
+    await new Promise(r => setTimeout(r, 0));
+    const planar = await src.readPlanar(ids[k]);
+    for (let c = 0; c < m.C; c++) S.est[c].push(blockMean(planar[c], m.W, m.H, S.fe).d);
+  }
+  S.base = S.est.map(arrs => medianStack(arrs));
+  S.gA = { name: 'a', w: S.ew, h: S.eh, stack: S.est, ids: S.ids, px: S.pxEst }; S.gE = null;
+}
+/* finer grid + fewer images for dark-edge detection (thin outlines need more pixels) */
+async function ensureEdgeGrid() {
+  if (S.gE) return;
+  const m = S.meta, all = S.ids, K = Math.min(all.length, CFG.MAX_SLICES_EDGE), pick = [];
+  for (let i = 0; i < K; i++) { const v = all[K === 1 ? 0 : Math.round(i * (all.length - 1) / (K - 1))]; if (!pick.includes(v)) pick.push(v); }
+  const stack = Array.from({ length: m.C }, () => []);
+  for (let k = 0; k < pick.length; k++) {
+    setStatus(`Reading image ${k + 1}/${pick.length} for dark-edge detection …`, 'busy'); await new Promise(r => setTimeout(r, 0));
+    const planar = await S.src.readPlanar(pick[k]);
+    for (let c = 0; c < m.C; c++) stack[c].push(blockMean(planar[c], m.W, m.H, S.feE).d);
+  }
+  S.gE = { name: 'e', w: S.eeW, h: S.eeH, stack, ids: pick, px: S.pxEstE };
+}
+function seededRandom(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+/* synthetic demo: round bright droplets, vignetting, noise, two channels, three Z slices */
+function makeDemo() {
+  const W = 640, H = 640, C = 2, Z = 3, rnd = seededRandom(7);
+  const drops = []; 
+  for (let t = 0; t < 400 && drops.length < 24; t++) {
+    const r = 16 + rnd() * 30, x = r + rnd() * (W - 2 * r), y = r + rnd() * (H - 2 * r);
+    if (drops.every(d => Math.hypot(d.x - x, d.y - y) > d.r + r + 6)) drops.push({ x, y, r, a: 0.6 + rnd() * 0.8, b: 0.3 + rnd() * 1.0 });
+  }
+  const frames = [];
+  for (let z = 0; z < Z; z++) {
+    const planar = [];
+    for (let c = 0; c < C; c++) {
+      const a = new Float32Array(W * H), bg = c === 0 ? 220 : 160, amp = c === 0 ? 1500 : 1000, focus = 1 - 0.35 * Math.abs(z - 1);
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+        const xx = x / (W - 1) * 2 - 1, yy = y / (H - 1) * 2 - 1, vig = 1 - 0.34 * (xx * xx + yy * yy);
+        let v = bg;
+        for (const d of drops) {
+          const dd = Math.hypot(x - d.x, y - d.y);
+          if (dd < d.r + 4) v += amp * (c === 0 ? d.a : d.b) * focus * clamp((d.r - dd) / 2.5 + 0.5, 0, 1);
+        }
+        v *= vig;
+        let g = 0; for (let k = 0; k < 4; k++) g += rnd(); g = (g - 2) * 1.7;
+        a[y * W + x] = Math.max(0, v + g * Math.sqrt(v) * 0.7);
+      }
+      planar.push(a);
+    }
+    frames.push(planar);
+  }
+  return { meta: { W, H, C, N: 1, Z, pxUm: 0.65, chNames: ['GFP (demo)', 'mCherry (demo)'], labels: ['demo'], seqOf: z => z }, readPlanar: async s => frames[s] };
+}
+
+/* ---- ND2 (NIS-Elements, file version 3) reader ---- */
+function parseLV(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength), dec = new TextDecoder('utf-16le');
+  let pos = 0;
+  const add = (o, k, v) => { let kk = k, i = 0; while (kk in o) kk = k + '#' + (++i); o[kk] = v; };
+  const readStr = () => { let q = pos; while (q + 1 < u8.length && !(u8[q] === 0 && u8[q + 1] === 0)) q += 2; const s = dec.decode(u8.subarray(pos, q)); pos = q + 2; return s; };
+  function item() {
+    const type = u8[pos++], nameLen = u8[pos++];
+    const name = dec.decode(u8.subarray(pos, pos + nameLen * 2)).replace(/\0+$/, ''); pos += nameLen * 2;
+    let val;
+    switch (type) {
+      case 1: val = u8[pos] !== 0; pos += 1; break;
+      case 2: val = dv.getInt32(pos, true); pos += 4; break;
+      case 3: val = dv.getUint32(pos, true); pos += 4; break;
+      case 4: val = Number(dv.getBigInt64(pos, true)); pos += 8; break;
+      case 5: case 7: val = Number(dv.getBigUint64(pos, true)); pos += 8; break;
+      case 6: val = dv.getFloat64(pos, true); pos += 8; break;
+      case 8: val = readStr(); break;
+      case 9: { const l = Number(dv.getBigUint64(pos, true)); pos += 8; val = u8.subarray(pos, pos + l); pos += l; break; }
+      case 11: { const cnt = dv.getUint32(pos, true); pos += 12; val = {}; for (let i = 0; i < cnt; i++) { const [k, v] = item(); add(val, k, v); } pos += cnt * 8; break; }
+      default: throw new Error('unknown LV type ' + type);
+    }
+    return [name, val];
+  }
+  const out = {};
+  try { while (pos < u8.length - 2) { const [k, v] = item(); add(out, k, v); } } catch (e) { out.__error = String(e); }
+  return out;
+}
+function findKey(o, key, depth = 0) {
+  if (!o || typeof o !== 'object' || depth > 12 || ArrayBuffer.isView(o)) return undefined;
+  if (key in o) return o[key];
+  for (const v of Object.values(o)) { const r = findKey(v, key, depth + 1); if (r !== undefined) return r; }
+  return undefined;
+}
+function getLoops(exp) {
+  const loops = []; let cur = exp;
+  for (let g = 0; cur && typeof cur === 'object' && g < 8; g++) {
+    const p = cur.uLoopPars; let cnt = p && (p.uiCount ?? p.uiLoopCount);
+    loops.push({ type: cur.eType, count: cnt });
+    const nx = cur.ppNextLevelEx; cur = nx && typeof nx === 'object' ? Object.values(nx)[0] : null;
+  }
+  return loops;
+}
+async function openND2(file) {
+  const rd = async (s, l) => file.slice(s, s + l).arrayBuffer();
+  const ascii = u => String.fromCharCode(...u);
+  if (file.size < 1000) throw new Error('file too small to be an ND2 file');
+  const foot = new DataView(await rd(file.size - 40, 40));
+  const sig = ascii(new Uint8Array(foot.buffer, 0, 32));
+  if (!sig.startsWith('ND2 CHUNK MAP SIGNATURE')) throw new Error('this is not an ND2 version 3 file (older ND2 files use a different format and are not supported)');
+  const mapPos = Number(foot.getBigUint64(32, true));
+  const hdr = new DataView(await rd(mapPos, 16));
+  if (hdr.getUint32(0, true) !== 0x0ABECEDA) throw new Error('chunk map not found');
+  const mb = await rd(mapPos + 16 + hdr.getUint32(4, true), Number(hdr.getBigUint64(8, true)));
+  const mu = new Uint8Array(mb), mv = new DataView(mb), map = new Map();
+  for (let p = 0; p < mu.length;) {
+    let q = p; while (q < mu.length && mu[q] !== 0x21) q++;
+    const name = ascii(mu.subarray(p, q + 1)); p = q + 1;
+    if (name.startsWith('ND2 FILEMAP SIGNATURE') || p + 16 > mu.length) break;
+    map.set(name, { off: Number(mv.getBigUint64(p, true)) }); p += 16;
+  }
+  async function chunkRange(name) {
+    const e = map.get(name); if (!e) return null;
+    const h = new DataView(await rd(e.off, 16));
+    return { start: e.off + 16 + h.getUint32(4, true), len: Number(h.getBigUint64(8, true)) };
+  }
+  async function chunkLV(name) {
+    const r = await chunkRange(name); if (!r) return {};
+    return parseLV(new Uint8Array(await rd(r.start, r.len)));
+  }
+  const attrs = findKey(await chunkLV('ImageAttributesLV!'), 'SLxImageAttributes');
+  if (!attrs) throw new Error('image attributes missing in file');
+  const W = attrs.uiWidth, H = attrs.uiHeight, C = attrs.uiComp || 1, widthBytes = attrs.uiWidthBytes;
+  const bits = attrs.uiBpcInMemory || 16, seqCount = attrs.uiSequenceCount || 1;
+  if (![8, 16, 32].includes(bits)) throw new Error('unsupported bit depth ' + bits);
+  let pxUm = null, chNames = [], loops = [];
+  try {
+    const seqMeta = await chunkLV('ImageMetadataSeqLV|0!');
+    const pm = findKey(seqMeta, 'SLxPictureMetadata');
+    const cal = pm && pm.dCalibration; if (cal > 0) pxUm = cal;
+    const planes = findKey(pm || {}, 'sPlaneNew');
+    if (planes) chNames = Object.keys(planes).filter(k => !k.includes('#')).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)))
+      .map(k => planes[k] && planes[k].sDescription).filter(x => typeof x === 'string');
+  } catch (_) {}
+  try { loops = getLoops(findKey(await chunkLV('ImageMetadataLV!'), 'SLxExperiment')); } catch (_) {}
+  if (chNames.length !== C) chNames = Array.from({ length: C }, (_, i) => 'Channel ' + (i + 1));
+  // sequence index -> (image n, Z slice z)
+  let N = seqCount, Z = 1, seqOf = (n, z) => n, labels = Array.from({ length: seqCount }, (_, i) => 'image ' + (i + 1));
+  const prod = loops.reduce((p, l) => p * (l.count || 0), 1);
+  const zi = loops.findIndex(l => l.type === 4);
+  if (loops.length && prod === seqCount && zi >= 0) {
+    Z = loops[zi].count; N = seqCount / Z;
+    const counts = loops.map(l => l.count), stride = counts.map((_, i) => counts.slice(i + 1).reduce((p, v) => p * v, 1));
+    const table = [], lab = []; const letters = { 1: 'T', 2: 'P', 8: 'T' };
+    for (let s = 0; s < seqCount; s++) {
+      const co = counts.map((c, i) => Math.floor(s / stride[i]) % c);
+      let n = 0, nn = 1; const tag = [];
+      for (let i = counts.length - 1; i >= 0; i--) if (i !== zi) { n += co[i] * nn; nn *= counts[i]; }
+      loops.forEach((l, i) => { if (i !== zi) tag.push((letters[l.type] || 'L') + (co[i] + 1)); });
+      (table[n] = table[n] || [])[co[zi]] = s; if (!lab[n]) lab[n] = tag.join(' ') || 'image ' + (n + 1);
+    }
+    seqOf = (n, z) => table[n][z]; labels = lab;
+  } else if (loops.length && prod === seqCount) {
+    const counts = loops.map(l => l.count), letters = { 1: 'T', 2: 'P', 8: 'T' }, stride = counts.map((_, i) => counts.slice(i + 1).reduce((p, v) => p * v, 1));
+    labels = Array.from({ length: seqCount }, (_, s) => counts.map((c, i) => (letters[loops[i].type] || 'L') + (Math.floor(s / stride[i]) % c + 1)).join(' '));
+  }
+  const bytesEl = bits / 8, rowEl = (widthBytes || W * C * bytesEl) / bytesEl;
+  async function readPlanar(seq) {
+    const e = map.get('ImageDataSeq|' + seq + '!'); if (!e) throw new Error('image ' + seq + ' not found in file');
+    const h = new DataView(await rd(e.off, 16)), dl = Number(h.getBigUint64(8, true));
+    let u8 = new Uint8Array(await rd(e.off + 16 + h.getUint32(4, true) + 8, dl - 8));
+    if (u8.length < H * rowEl * bytesEl) {
+      if (typeof DecompressionStream === 'undefined') throw new Error('compressed ND2 data needs a current Chrome');
+      u8 = new Uint8Array(await new Response(new Blob([u8]).stream().pipeThrough(new DecompressionStream('deflate'))).arrayBuffer());
+      if (u8.length < H * rowEl * bytesEl) throw new Error('lossy-compressed ND2 data is not supported');
+    }
+    const arr = bits === 16 ? new Uint16Array(u8.buffer, u8.byteOffset, u8.length >> 1) : bits === 8 ? u8 : new Float32Array(u8.buffer, u8.byteOffset, u8.length >> 2);
+    const out = Array.from({ length: C }, () => new Float32Array(W * H));
+    for (let y = 0; y < H; y++) { const ro = y * rowEl, o = y * W; for (let x = 0; x < W; x++) for (let c = 0; c < C; c++) out[c][o + x] = arr[ro + x * C + c]; }
+    return out;
+  }
+  return { meta: { W, H, C, N, Z, pxUm, chNames, labels, seqOf }, readPlanar };
+}
+// ===== UI =====
+/* =====================================================================================
+   USER INTERFACE
+   ===================================================================================== */
+const $ = (s, r = document) => r.querySelector(s);
+const cssVar = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const LUTS = { green: [0, 1, 0], magenta: [1, 0, 1], red: [1, 0, 0], cyan: [0, 1, 1], yellow: [1, 1, 0], blue: [0, 0.3, 1], gray: [1, 1, 1] };
+const LUT_NAMES = Object.keys(LUTS);
+const DETECT_LABELS = { bright: 'bright body', edge: 'dark edge' };
+const MODE_LABELS = { image: 'whole image', background: 'background only', objects: 'round objects only' };
+function guessLut(name, i) {
+  const n = name.toLowerCase();
+  if (/dapi|hoechst|bfp|blue/.test(n)) return 'blue';
+  if (/gfp|fitc|488|green/.test(n)) return 'green';
+  if (/cherry|rfp|tritc|cy3|561|594|red/.test(n)) return 'magenta';
+  return ['green', 'magenta', 'cyan', 'yellow', 'red', 'blue'][i % 6];
+}
+const lutCss = n => { const c = LUTS[n]; return `rgb(${c.map(v => Math.round(v * 255)).join(',')})`; };
+const tick = () => new Promise(r => setTimeout(r, 0));
+function setStatus(msg, kind = '') { const e = $('#status'); e.textContent = msg; e.className = kind; }
+
+Object.assign(S, { frame: 0, z: 0, sigma: 1, strength: 1, offset: 0, showObjects: false, frames: new Map(), cur: null, ui: [] });
+
+async function getFrame(n, z) {
+  const m = S.meta, seq = m.seqOf(n, z);
+  if (S.frames.has(seq)) return S.frames.get(seq);
+  const planar = await S.src.readPlanar(seq);
+  const est = planar.map(a => blockMean(a, m.W, m.H, S.fe).d);
+  const fr = { seq, disp: planar.map(a => blockMean(a, m.W, m.H, S.ds).d), est, estE: S.feE === S.fe ? est : planar.map(a => blockMean(a, m.W, m.H, S.feE).d) };
+  if (S.frames.size >= 6) S.frames.delete(S.frames.keys().next().value);
+  S.frames.set(seq, fr); return fr;
+}
+function flatDisp(c) {
+  if (!S.flatDisp[c]) S.flatDisp[c] = resizeBilinear(S.illum[c].flat, S.ew, S.eh, S.dw, S.dh);
+  const s = S.strength; if (!S.fp[c] || S.fp[c].s !== s) { const f = S.flatDisp[c]; S.fp[c] = { s, a: s === 1 ? f : f.map(v => Math.pow(v, s)) }; }
+  return S.fp[c].a;
+}
+function corrected(fr) {
+  const key = `${fr.seq}|${S.sigma}|${S.strength}|${S.illumVer}`;
+  if (S.corrKey === key) return S.corr;
+  const s = S.strength, out = [];
+  for (let c = 0; c < S.meta.C; c++) {
+    let a = fr.disp[c];
+    if (s > 0) { const f = flatDisp(c), d = s * S.illum[c].dark, b = new Float32Array(a.length); for (let i = 0; i < b.length; i++) b[i] = Math.max(a[i] - d, 0) / f[i]; a = b; }
+    if (S.sigma > 0) a = gaussian(a, S.dw, S.dh, S.sigma / S.ds);
+    out.push(a);
+  }
+  S.corrKey = key; S.corr = out; S.histKey = null; return out;
+}
+function burnBar(ctx, W, H, pxUm) {
+  const len = Math.round(CFG.SCALEBAR_UM / pxUm), thick = Math.max(3, Math.round(H * CFG.SB_THICK)), mg = Math.round(Math.min(W, H) * CFG.SB_MARGIN);
+  const x1 = W - mg, y1 = H - mg; ctx.fillStyle = '#fff'; ctx.fillRect(Math.max(0, x1 - len), Math.max(0, y1 - thick), Math.min(len, x1), thick);
+}
+let raf = 0;
+function refresh() { if (!raf) raf = requestAnimationFrame(() => { raf = 0; draw(); }); }
+
+function draw() {
+  if (!S.cur) return;
+  const C = S.meta.C, { dw, dh } = S, corr = corrected(S.cur);
+  const mg = S.idata[C].data; mg.fill(0); for (let i = 3; i < mg.length; i += 4) mg[i] = 255;
+  for (let c = 0; c < C; c++) {
+    const lut = LUTS[S.luts[c]], r = lut[0] * 255, g = lut[1] * 255, b = lut[2] * 255, lo = S.lo[c], inv = 1 / Math.max(S.hi[c] - lo, 1e-6);
+    const d = S.idata[c].data, a = corr[c];
+    for (let i = 0, j = 0; i < a.length; i++, j += 4) {
+      let n = (a[i] - lo) * inv; n = n < 0 ? 0 : n > 1 ? 1 : n;
+      d[j] = n * r; d[j + 1] = n * g; d[j + 2] = n * b; d[j + 3] = 255;
+      mg[j] += n * r; mg[j + 1] += n * g; mg[j + 2] += n * b;
+    }
+  }
+  for (let k = 0; k <= C; k++) { const ctx = S.ui[k].ctx; ctx.putImageData(S.idata[k], 0, 0); burnBar(ctx, dw, dh, S.pxView); }
+  drawHists(corr);
+  const m = S.meta;
+  $('#where').textContent = `${m.labels[S.frame]}${m.N > 1 ? `  (${S.frame + 1}/${m.N})` : ''}${m.Z > 1 ? `, Z ${S.z + 1}/${m.Z}` : ''}`;
+}
+function drawHists(corr) {
+  const C = S.meta.C;
+  if (S.histKey !== S.corrKey) {
+    S.hist = corr.map(a => {
+      const sub = new Float32Array(Math.ceil(a.length / 3)); for (let i = 0, j = 0; i < a.length; i += 3) sub[j++] = a[i];
+      const [x0, x1] = pctl(sub, [0.05, 99.95]), hi = x1 > x0 ? x1 : x0 + 1, counts = new Float64Array(256);
+      for (let i = 0; i < sub.length; i++) { let b = Math.floor((sub[i] - x0) / (hi - x0) * 256); if (b >= 0 && b < 256) counts[b]++; }
+      return { x0, x1: hi, counts };
+    });
+    S.histKey = S.corrKey;
+  }
+  const dpr = window.devicePixelRatio || 1, ink = cssVar('--ink');
+  for (let c = 0; c < C; c++) {
+    const cv = S.ui[c].hist, W = cv.width / dpr, H = cv.height / dpr, ctx = cv.getContext('2d'), hs = S.hist[c];
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, W, H);
+    let ymax = 1; for (const v of hs.counts) if (v > ymax) ymax = v; ymax *= 1.05;
+    const X = v => clamp((v - hs.x0) / (hs.x1 - hs.x0), 0, 1) * W, Y = v => H - 12 - v / ymax * (H - 16);
+    ctx.fillStyle = S.luts[c] === 'gray' ? '#808080' : lutCss(S.luts[c]);
+    const bw = W / 256; for (let i = 0; i < 256; i++) { const hh = (H - 12) - Y(hs.counts[i]); ctx.fillRect(i * bw, Y(hs.counts[i]), bw + 0.6, hh); }
+    ctx.strokeStyle = ink; ctx.lineWidth = 1.3; ctx.beginPath();
+    ctx.moveTo(0, H - 12); ctx.lineTo(X(S.lo[c]), H - 12); ctx.lineTo(X(S.hi[c]), 4); ctx.lineTo(W, 4); ctx.stroke();
+    ctx.fillStyle = ink; ctx.font = '9px system-ui,sans-serif'; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'left'; ctx.fillText(hs.x0.toFixed(0), 2, H - 2); ctx.textAlign = 'right'; ctx.fillText(hs.x1.toFixed(0), W - 2, H - 2);
+  }
+}
+function setBoxes(c) { S.ui[c].min.value = S.lo[c].toFixed(1); S.ui[c].max.value = S.hi[c].toFixed(1); }
+function autoBC(c) {
+  const a = S.corr ? S.corr[c] : corrected(S.cur)[c];
+  const sub = new Float32Array(Math.ceil(a.length / 3)); for (let i = 0, j = 0; i < a.length; i += 3) sub[j++] = a[i];
+  const [lo, hi] = pctl(sub, [0.5, 99.8]); S.lo[c] = lo; S.hi[c] = hi > lo ? hi : lo + 1; setBoxes(c);
+}
+
+function buildPanels() {
+  const m = S.meta, C = m.C, wrap = $('#panels'); wrap.innerHTML = ''; wrap.style.setProperty('--cols', C + 1);
+  S.ui = []; S.idata = [];
+  for (let k = 0; k <= C; k++) {
+    const col = document.createElement('div'); col.className = 'col';
+    col.innerHTML = `<h3></h3><div class="imgwrap"><canvas class="img" width="${S.dw}" height="${S.dh}"></canvas><canvas class="ov hidden" width="${S.ew}" height="${S.eh}"></canvas></div>`;
+    $('h3', col).textContent = k < C ? m.chNames[k] : 'Merged';
+    wrap.appendChild(col);
+    const ui = { col, canvas: $('canvas.img', col), ov: $('canvas.ov', col) }; ui.ctx = ui.canvas.getContext('2d');
+    S.ui.push(ui); S.idata.push(new ImageData(S.dw, S.dh));
+    if (k === C) {
+      const card = document.createElement('div'); card.className = 'card';
+      card.innerHTML = `<h4>Merged view</h4><p class="note">All channels added together using the colours chosen for each channel. The white bar is ${CFG.SCALEBAR_UM} µm.</p><p class="note" id="objsum"></p>`;
+      col.appendChild(card); continue;
+    }
+    const card = document.createElement('div'); card.className = 'card';
+    card.innerHTML = `
+      <div><h4>Colour</h4><div class="luts"></div></div>
+      <div><h4>Brightness / contrast</h4>
+        <div class="bc"><label>min <input type="text" class="min" inputmode="decimal"></label><label>max <input type="text" class="max" inputmode="decimal"></label><button class="btn small auto" type="button">Auto</button></div></div>
+      <canvas class="hist" width="440" height="128"></canvas>
+      <fieldset><legend>Objects found by</legend>
+        ${Object.entries(DETECT_LABELS).map(([k2, l]) => `<label><input type="radio" name="det${k}" value="${k2}" ${S.detect[k] === k2 ? 'checked' : ''}>${l}</label>`).join('')}
+      </fieldset>
+      <fieldset><legend>Flat-field based on</legend>
+        ${Object.entries(MODE_LABELS).map(([k2, l]) => `<label><input type="radio" name="mode${k}" value="${k2}" ${S.want[k] === k2 ? 'checked' : ''}>${l}</label>`).join('')}
+      </fieldset>
+      ${C > 1 ? `<label class="chk"><input type="checkbox" class="share" ${S.share[k] ? 'checked' : ''}>also mask objects found in other channels</label>` : ''}
+      <p class="note illnote"></p>`;
+    col.appendChild(card);
+    ui.hist = $('canvas.hist', card); ui.min = $('.min', card); ui.max = $('.max', card); ui.note = $('.illnote', card);
+    const dpr = window.devicePixelRatio || 1; ui.hist.width = 440 * dpr / 2; ui.hist.height = 128 * dpr / 2;
+    ui.hist.style.height = '64px';
+    const lw = $('.luts', card);
+    for (const n of LUT_NAMES) {
+      const b = document.createElement('button'); b.type = 'button'; b.title = n; b.setAttribute('aria-label', n);
+      b.style.background = n === 'gray' ? '#9aa0a6' : lutCss(n); b.setAttribute('aria-pressed', S.luts[k] === n);
+      b.onclick = () => { S.luts[k] = n; lw.querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', x === b)); refresh(); };
+      lw.appendChild(b);
+    }
+    const submit = which => () => {
+      const v = parseFloat((which === 'lo' ? ui.min : ui.max).value.replace(',', '.'));
+      if (!isNaN(v)) { const nl = which === 'lo' ? v : S.lo[k], nh = which === 'hi' ? v : S.hi[k]; if (nh > nl) { S.lo[k] = nl; S.hi[k] = nh; } }
+      setBoxes(k); refresh();
+    };
+    ui.min.onchange = submit('lo'); ui.max.onchange = submit('hi');
+    $('.auto', card).onclick = () => { autoBC(k); refresh(); };
+    card.querySelectorAll(`input[name=mode${k}]`).forEach(r => r.onchange = () => { S.want[k] = r.value; recomputeChannel(k); });
+    card.querySelectorAll(`input[name=det${k}]`).forEach(r => r.onchange = () => { S.detect[k] = r.value; if (S.want[k] !== 'image') recomputeChannel(k); else afterIllum(); });
+    const sh = $('.share', card); if (sh) sh.onchange = () => { S.share[k] = sh.checked; if (S.want[k] !== 'image') recomputeChannel(k); };
+    setBoxes(k);
+  }
+  wrap.onwheel = e => {
+    if (S.meta.Z < 2 || !e.target.closest('.imgwrap')) return;
+    e.preventDefault(); setZ(S.z + (e.deltaY < 0 ? 1 : -1));
+  };
+}
+function updateNotes() {
+  for (let c = 0; c < S.meta.C; c++) S.ui[c].note.textContent = `Illumination: ${MODE_LABELS[S.illum[c].mode]}${S.illum[c].note ? ' – ' + S.illum[c].note : ''}`;
+}
+async function recomputeChannel(c) {
+  setStatus(`Estimating illumination for ${S.meta.chNames[c]} (${MODE_LABELS[S.want[c]]}) …`, 'busy'); await tick(); await tick();
+  try {
+    const others = S.share[c] && S.meta.C > 1 && S.want[c] !== 'image' ? sourcesFor(c, S.illum) : [];
+    if (S.detect.includes('edge')) await ensureEdgeGrid();
+    S.illum[c] = estimateFlat(c, S.want[c], others, S.offset, S.detect[c]);
+  } catch (e) { console.error(e); setStatus('Illumination estimate failed: ' + e.message, 'error'); return; }
+  S.flatDisp[c] = null; S.fp[c] = null; S.illumVer++; S.corrKey = null;
+  updateNotes(); setStatus(`${S.name} – ready`); refresh(); afterIllum();
+}
+async function recomputeAll() {
+  const C = S.meta.C; setStatus('Estimating illumination …', 'busy'); await tick(); await tick();
+  if (S.detect.includes('edge')) await ensureEdgeGrid();
+  setStatus('Estimating illumination …', 'busy'); await tick();
+  const prelim = []; for (let c = 0; c < C; c++) prelim.push(estimateFlat(c, 'image', [], S.offset));
+  const res = [];
+  for (let c = 0; c < C; c++) {
+    if (S.want[c] === 'image') { res.push(prelim[c]); continue; }
+    setStatus(`Estimating illumination for ${S.meta.chNames[c]} (${MODE_LABELS[S.want[c]]}) …`, 'busy'); await tick();
+    res.push(estimateFlat(c, S.want[c], S.share[c] && C > 1 ? sourcesFor(c, prelim) : [], S.offset, S.detect[c]));
+  }
+  WF_CACHE.clear(); S.illum = res; S.flatDisp = new Array(C).fill(null); S.fp = new Array(C).fill(null); S.illumVer++; S.corrKey = null;
+}
+
+/* ---- toolbar ---- */
+function buildToolbar() {
+  const m = S.meta, tb = $('#toolbar'); tb.innerHTML = '';
+  const slider = (id, label, min, max, step, val, fmt, on) => {
+    const d = document.createElement('div'); d.className = 'ctl';
+    d.innerHTML = `<label for="${id}">${label}</label><div class="row"><input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${val}"><output></output></div>`;
+    const inp = $('input', d), out = $('output', d); out.textContent = fmt(val);
+    inp.oninput = () => { out.textContent = fmt(+inp.value); on(+inp.value); };
+    tb.appendChild(d); return inp;
+  };
+  const where = document.createElement('div'); where.className = 'ctl'; where.innerHTML = `<label>Showing</label><strong id="where" style="font-size:13px"></strong>`; tb.appendChild(where);
+  if (m.N > 1) S.sImg = slider('sImg', 'Image', 1, m.N, 1, S.frame + 1, v => v, v => goto(v - 1, S.z));
+  if (m.Z > 1) S.sZ = slider('sZ', 'Z slice (or mouse wheel)', 1, m.Z, 1, S.z + 1, v => v, v => goto(S.frame, v - 1));
+  slider('sSm', 'Smoothing (sigma, px)', 0, 4, 0.25, S.sigma, v => v.toFixed(2), v => { S.sigma = v; refresh(); });
+  slider('sSt', 'Flat-field strength (0 raw – 1 full)', 0, 1, 0.05, S.strength, v => v.toFixed(2), v => { S.strength = v; refresh(); });
+  const num = (label, val, on, title) => {
+    const d = document.createElement('div'); d.className = 'ctl'; d.innerHTML = `<label>${label}</label><input type="text" inputmode="decimal" value="${val}" ${title ? `title="${title}"` : ''}>`;
+    const i = $('input', d); i.onchange = () => on(i); tb.appendChild(d); return i;
+  };
+  S.tbOff = num('Camera offset (gray)', S.offset, async i => {
+    const v = parseFloat(i.value.replace(',', '.')); if (isNaN(v) || v < 0) { i.value = S.offset; return; }
+    if (v !== S.offset) { S.offset = v; await recomputeAll(); S.corrKey = null; updateNotes(); setStatus(`${S.name} – ready`); refresh(); afterIllum(); }
+  }, 'Dark offset of the camera in gray values, subtracted before flat-fielding');
+  S.tbPx = num('Pixel size (µm/px)', +S.meta.pxUm.toFixed(5), async i => {
+    const v = parseFloat(i.value.replace(',', '.')); if (!(v > 0)) { i.value = S.meta.pxUm; return; }
+    updatePixelSize(v); await recomputeAll(); updateNotes(); setStatus(`${S.name} – ready`); refresh(); afterIllum();
+  }, 'Used for the scalebar and for the margin around objects');
+  const b = document.createElement('div'); b.className = 'btns';
+  const mk = (txt, fn, id) => { const x = document.createElement('button'); x.type = 'button'; x.className = 'btn'; x.textContent = txt; if (id) x.id = id; x.onclick = fn; b.appendChild(x); return x; };
+  mk('Show detected objects', toggleObjects, 'bObj'); mk('Illumination profiles', toggleIllum, 'bIll'); mk('Workflow figure', showWorkflow);
+  mk('Export this slice (PNG)', exportSlice); mk('Save settings', saveSettings); mk('Load settings', () => $('#settingsFile').click());
+  tb.appendChild(b);
+}
+async function goto(n, z) {
+  S.frame = n; S.z = z; const tok = ++S.tok;
+  const fr = await getFrame(n, z); if (tok !== S.tok) return;
+  S.cur = fr; refresh(); if (S.showObjects) scheduleObjects();
+}
+function setZ(z) { z = clamp(z, 0, S.meta.Z - 1); if (z === S.z) return; if (S.sZ) { S.sZ.value = z + 1; S.sZ.nextElementSibling.textContent = z + 1; } goto(S.frame, z); }
+
+/* ---- detected objects overlay ---- */
+let objTimer = 0;
+function scheduleObjects() { clearTimeout(objTimer); objTimer = setTimeout(updateObjects, 120); }
+function toggleObjects() {
+  S.showObjects = !S.showObjects; $('#bObj').classList.toggle('on', S.showObjects);
+  S.ui.forEach(u => u.ov.classList.toggle('hidden', !S.showObjects));
+  $('#objsum').textContent = '';
+  if (S.showObjects) updateObjects();
+}
+const pickGrid = () => (S.detect.includes('edge') && S.gE) ? S.gE : S.gA;
+function flatOn(c, G) {
+  if (G === S.gA) return S.illum[c].flat;
+  S.flE = S.flE || {}; const key = c + '|' + S.illumVer;
+  if (!S.flE[key]) { if (Object.keys(S.flE).length > 20) S.flE = {}; S.flE[key] = resizeBilinear(S.illum[c].flat, S.ew, S.eh, G.w, G.h); }
+  return S.flE[key];
+}
+/* objects of every channel in the current image; with sharing on, objects of the other channels are added */
+function detectAll(fr, G) {
+  const C = S.meta.C, data = G === S.gA ? fr.est : fr.estE, segs = [];
+  for (let c = 0; c < C; c++) { const fl = flatOn(c, G), dk = S.illum[c].dark; segs.push(detectCached(G, S.detect[c], c, 'f' + fr.seq, dk, fl, flattenImg(data[c], dk, fl))); }
+  return segs.map((sg, c) => (S.share[c] && C > 1) ? mergeObjects(sg, segs.filter((_, j) => j !== c)) : { lab: sg.lab, acc: sg.acc, fromOther: new Uint8Array(sg.acc.length), n: sg.n });
+}
+/* outline pixels: green = this channel, cyan = from another channel, red = rejected */
+function makeOverlay(res, w, h, ctx) {
+  const { lab, acc, fromOther } = res, id = ctx.createImageData(w, h), d = id.data, seen = new Set(); let own = 0, oth = 0, bad = 0;
+  for (let i = 0; i < lab.length; i++) {
+    const l = lab[i]; if (!l) continue;
+    if (!seen.has(l)) { seen.add(l); if (!acc[l]) bad++; else if (fromOther[l]) oth++; else own++; }
+    const x = i % w, y = (i / w) | 0;
+    if (!(x === 0 || y === 0 || x === w - 1 || y === h - 1 || lab[i - 1] !== l || lab[i + 1] !== l || lab[i - w] !== l || lab[i + w] !== l)) continue;
+    const col = !acc[l] ? [255, 70, 70] : fromOther[l] ? [60, 230, 255] : [60, 255, 80];
+    d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 255;
+  }
+  return { id, own, oth, bad };
+}
+async function updateObjects() {
+  if (!S.showObjects || !S.cur) return;
+  const tok = S.objTok = (S.objTok || 0) + 1;
+  try {
+    if (S.detect.includes('edge') && !S.gE) await ensureEdgeGrid();
+    setStatus('Detecting objects …', 'busy'); await tick(); await tick();
+    if (tok !== S.objTok) return;
+    const G = pickGrid(), res = detectAll(S.cur, G), sums = [];
+    for (let c = 0; c < S.meta.C; c++) {
+      const ov = S.ui[c].ov; ov.width = G.w; ov.height = G.h; const ctx = ov.getContext('2d'), o = makeOverlay(res[c], G.w, G.h, ctx);
+      ctx.putImageData(o.id, 0, 0);
+      sums.push(`${S.meta.chNames[c]} (${DETECT_LABELS[S.detect[c]]}): ${o.own} round (green)${o.oth ? `, ${o.oth} from other channel (cyan)` : ''}${o.bad ? `, ${o.bad} rejected (red)` : ''}`);
+    }
+    $('#objsum').textContent = sums.join(' · '); setStatus(`${S.name} – ready`);
+  } catch (e) { console.error(e); setStatus('Object detection failed: ' + e.message, 'error'); }
+}
+
+/* ---- workflow figure (for presentations) ---- */
+const WF_CACHE = new Map();
+async function wfInfo(c, mode, detect) {
+  if (mode === 'image') { if (S.illum[c].mode === 'image') return S.illum[c]; detect = 'bright'; }
+  else if (S.illum[c].mode === mode && S.detect[c] === detect) return S.illum[c];
+  const useShare = !!(S.share[c] && mode !== 'image' && S.meta.C > 1);
+  const key = [c, mode, detect, useShare, S.offset, S.illumVer, S.meta.pxUm].join('|');
+  if (!WF_CACHE.has(key)) {
+    if (detect === 'edge' || (useShare && S.detect.includes('edge'))) await ensureEdgeGrid();
+    WF_CACHE.set(key, estimateFlat(c, mode, useShare ? sourcesFor(c, S.illum) : [], S.offset, detect));
+  }
+  return WF_CACHE.get(key);
+}
+async function showWorkflow() {
+  setStatus('Building workflow figure …', 'busy'); await tick(); await tick();
+  try {
+    if (S.detect.includes('edge')) await ensureEdgeGrid();
+    const m = S.meta, C = m.C, fr = S.cur, { dw, dh } = S, chans = [];
+    for (let c = 0; c < C; c++) {
+      const raw = fr.disp[c], kind = S.detect[c], adjMode = S.want[c] !== 'image' ? S.want[c] : 'background';
+      const nw = await wfInfo(c, adjMode, kind), old = await wfInfo(c, 'image', 'bright'), dark = nw.dark;
+      const fl = resizeBilinear(nw.flat, S.ew, S.eh, dw, dh), dsub = new Float32Array(raw.length), adj = new Float32Array(raw.length);
+      for (let i = 0; i < raw.length; i++) { dsub[i] = Math.max(raw[i] - dark, 0); adj[i] = dsub[i] / fl[i] + dark; }
+      const [r0, r1] = pctl(raw, [0.5, 99.8]), [a0, a1] = pctl(adj, [0.5, 99.8]);
+      chans.push({ raw, adj, dsub, old, nw, kind, adjMode, vmin: Math.min(r0, a0), vmax: Math.max(r1, a1), lut: LUTS[S.luts[c]], g: pctl(dsub, [0.5, 99.8]) });
+    }
+    const G = pickGrid(), objs = detectAll(fr, G);
+    // ---- layout (pixels)
+    const PW = 460, PH = Math.round(PW * dh / dw), gx = Math.round(0.26 * PW), gy = Math.round(0.40 * PH), L = 100, T = 140, B = 110, R = 90;
+    const nRows = C + (C > 1 ? 1 : 0), W = L + 7 * PW + 6 * gx + R, H = T + nRows * PH + (nRows - 1) * gy + B;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    const FT = '21px "Segoe UI",system-ui,sans-serif', FL = '17px "Segoe UI",system-ui,sans-serif', FS = '14px "Segoe UI",system-ui,sans-serif', INK = '#222';
+    const px = k => L + k * (PW + gx), py = r => T + r * (PH + gy);
+    const titles = ['1  Raw data\n(dashed line: profile path)', '2  Illumination profile\n(bottom-left to top-right)', '3  Objects identified\n(round, smooth outlines)', '4  Illumination map\n(initial)', '5  Illumination map\n(adjusted)', '6  Adjusted picture\n(raw / illumination map)', '7  New illumination profile\n(bottom-left to top-right)'];
+    const text = (s, x, y, font, align = 'center', color = INK, lh = 24, base = 'alphabetic') => { ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = base; String(s).split('\n').forEach((t, i) => ctx.fillText(t, x, y + i * lh)); };
+    const title = (k, r, s) => text(s, px(k) + PW / 2, py(r) - 44, FT);
+    const drawCv = (oc, k, r) => ctx.drawImage(oc, px(k), py(r), PW, PH);
+    const mkCanvas = (w, h, fn) => { const oc = document.createElement('canvas'); oc.width = w; oc.height = h; const x = oc.getContext('2d'), id = x.createImageData(w, h); fn(id.data); x.putImageData(id, 0, 0); return oc; };
+    const tint = (arr, ch, vmin, vmax) => mkCanvas(dw, dh, d => { const inv = 1 / Math.max(vmax - vmin, 1e-6); for (let i = 0; i < arr.length; i++) { const n = clamp((arr[i] - vmin) * inv, 0, 1); d[i * 4] = n * ch[0] * 255; d[i * 4 + 1] = n * ch[1] * 255; d[i * 4 + 2] = n * ch[2] * 255; d[i * 4 + 3] = 255; } });
+    const mergedCv = key => mkCanvas(dw, dh, d => { for (let i = 0; i < dw * dh; i++) { let r = 0, g = 0, b = 0; for (const ch of chans) { const n = clamp((ch[key][i] - ch.vmin) / Math.max(ch.vmax - ch.vmin, 1e-6), 0, 1); r += n * ch.lut[0]; g += n * ch.lut[1]; b += n * ch.lut[2]; } d[i * 4] = clamp(r, 0, 1) * 255; d[i * 4 + 1] = clamp(g, 0, 1) * 255; d[i * 4 + 2] = clamp(b, 0, 1) * 255; d[i * 4 + 3] = 255; } });
+    const diag = (k, r) => { ctx.save(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.setLineDash([8, 6]); ctx.beginPath(); ctx.moveTo(px(k), py(r) + PH); ctx.lineTo(px(k) + PW, py(r)); ctx.stroke(); ctx.restore(); };
+    const bar = (k, r) => { const len = CFG.SCALEBAR_UM / S.pxView * PW / dw, th = Math.max(4, PH * CFG.SB_THICK), mg = Math.min(PW, PH) * CFG.SB_MARGIN; ctx.fillStyle = '#fff'; ctx.fillRect(px(k) + PW - mg - len, py(r) + PH - mg - th, len, th); };
+    const note = (k, r, s) => {
+      ctx.font = FS; const ls = s.split('\n'), wd = Math.max(...ls.map(t => ctx.measureText(t).width)) + 12, hh = ls.length * 19 + 8, x = px(k) + 14, y = py(r) + PH - 14 - hh;
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(x, y, wd, hh); text(s, x + 6, y + 17, FS, 'left', '#fff', 19);
+    };
+    const rowLabel = (r, s) => { ctx.save(); ctx.translate(px(0) - 34, py(r) + PH / 2); ctx.rotate(-Math.PI / 2); text(s, 0, 0, FT); ctx.restore(); };
+    const plot = (k, r, series, xlabel = 'Distance (µm)') => {
+      const x0 = px(k), y0 = py(r); let ymin = Infinity, ymax = -Infinity, xmax = 0;
+      for (const s of series) { for (const v of s.y) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; } xmax = Math.max(xmax, s.x[s.x.length - 1]); }
+      const pd = 0.05 * (ymax - ymin + 1e-6); ymin -= pd; ymax += pd;
+      const X = v => x0 + v / xmax * PW, Y = v => y0 + (1 - (v - ymin) / (ymax - ymin)) * PH;
+      ctx.lineWidth = 1; ctx.strokeStyle = '#e0e0e0';
+      for (let i = 0; i <= 5; i++) { const v = ymin + (ymax - ymin) * i / 5, xx = xmax * i / 5; ctx.beginPath(); ctx.moveTo(x0, Y(v)); ctx.lineTo(x0 + PW, Y(v)); ctx.moveTo(X(xx), y0); ctx.lineTo(X(xx), y0 + PH); ctx.stroke(); text(v.toFixed(0), x0 - 8, Y(v), FS, 'right', INK, 0, 'middle'); text(xx.toFixed(0), X(xx), y0 + PH + 18, FS, 'center', INK, 0, 'alphabetic'); }
+      ctx.save(); ctx.beginPath(); ctx.rect(x0, y0, PW, PH); ctx.clip();
+      for (const s of series) { ctx.strokeStyle = s.color; ctx.lineWidth = s.lw; ctx.beginPath(); s.x.forEach((xv, i) => { i ? ctx.lineTo(X(xv), Y(s.y[i])) : ctx.moveTo(X(xv), Y(s.y[i])); }); ctx.stroke(); }
+      ctx.restore(); ctx.strokeStyle = INK; ctx.lineWidth = 1.2; ctx.strokeRect(x0, y0, PW, PH);
+      text(xlabel, x0 + PW / 2, y0 + PH + 42, FL); ctx.save(); ctx.translate(x0 - 62, y0 + PH / 2); ctx.rotate(-Math.PI / 2); text('Gray value', 0, 0, FL); ctx.restore();
+      ctx.font = FS; const lw = Math.max(...series.map(s => ctx.measureText(s.label).width)) + 52, lh = series.length * 21 + 10, lx = x0 + PW / 2 - lw / 2, ly = y0 + PH - 8 - lh;
+      ctx.fillStyle = 'rgba(255,255,255,.92)'; ctx.fillRect(lx, ly, lw, lh); ctx.strokeStyle = '#999'; ctx.lineWidth = 0.8; ctx.strokeRect(lx, ly, lw, lh);
+      series.forEach((s, i) => { const yy = ly + 16 + i * 21; ctx.strokeStyle = s.color; ctx.lineWidth = s.lw; ctx.beginPath(); ctx.moveTo(lx + 8, yy - 4); ctx.lineTo(lx + 36, yy - 4); ctx.stroke(); text(s.label, lx + 42, yy, FS, 'left'); });
+    };
+    const um = (d, f) => Array.from(d, v => v * f);
+    const used = [];
+    for (let c = 0; c < C; c++) {
+      const ch = chans[c], first = c === 0;
+      used.push(`${m.chNames[c]}: ${MODE_LABELS[ch.adjMode]}, objects by ${DETECT_LABELS[ch.kind]}` + (S.share[c] && C > 1 ? ', objects of other channels masked' : ''));
+      // 1 raw
+      if (first) title(0, c, titles[0]); drawCv(tint(ch.raw, ch.lut, ch.vmin, ch.vmax), 0, c); diag(0, c); bar(0, c); rowLabel(c, m.chNames[c]);
+      // 3 objects
+      if (first) title(2, c, titles[2]);
+      drawCv(tint(ch.dsub, [1, 1, 1], ch.g[0], ch.g[1]), 2, c);
+      const oc = document.createElement('canvas'); oc.width = G.w; oc.height = G.h; const octx = oc.getContext('2d'), ov = makeOverlay(objs[c], G.w, G.h, octx); octx.putImageData(ov.id, 0, 0); drawCv(oc, 2, c); bar(2, c);
+      if (ov.own + ov.oth + ov.bad) note(2, c, `${ov.own} found here (green)` + (S.share[c] && C > 1 ? `\n${ov.oth} from other channel (cyan)` : '') + (ov.bad ? `\n${ov.bad} rejected (red)` : '') + `\nfound by ${DETECT_LABELS[ch.kind]}`); else note(2, c, 'no clear objects');
+      // 4 / 5 illumination maps (one colour scale)
+      let vmn = Infinity, vmx = -Infinity; for (const inf of [ch.old, ch.nw]) for (const v of inf.smooth) { if (v < vmn) vmn = v; if (v > vmx) vmx = v; }
+      [[3, ch.old, 'whole image'], [4, ch.nw, MODE_LABELS[ch.adjMode]]].forEach(([k, inf, what]) => {
+        if (first) title(k, c, titles[k]);
+        drawCv(mkCanvas(S.ew, S.eh, d => { for (let i = 0; i < inf.smooth.length; i++) { const col = magma((inf.smooth[i] - vmn) / Math.max(vmx - vmn, 1e-6)); d[i * 4] = col[0]; d[i * 4 + 1] = col[1]; d[i * 4 + 2] = col[2]; d[i * 4 + 3] = 255; } }), k, c);
+        diag(k, c); bar(k, c);
+        let mn = Infinity, mx = -Infinity; for (const v of inf.smooth) { if (v < mn) mn = v; if (v > mx) mx = v; }
+        note(k, c, `${what}\ndarkest = ${(100 * mn / mx).toFixed(0)}% of brightest`);
+        if (k === 4) {
+          const cx = px(4) + PW * 1.045, cw = PW * 0.05;
+          for (let j = 0; j < PH; j++) { const col = magma(1 - j / (PH - 1)); ctx.fillStyle = `rgb(${col[0] | 0},${col[1] | 0},${col[2] | 0})`; ctx.fillRect(cx, py(c) + j, cw, 1.5); }
+          ctx.strokeStyle = INK; ctx.lineWidth = 1; ctx.strokeRect(cx, py(c), cw, PH);
+          for (let i = 0; i <= 5; i++) { const v = vmn + (vmx - vmn) * i / 5, yy = py(c) + PH - PH * i / 5; ctx.beginPath(); ctx.moveTo(cx + cw, yy); ctx.lineTo(cx + cw + 5, yy); ctx.stroke(); text(v.toFixed(0), cx + cw + 8, yy, FS, 'left', INK, 0, 'middle'); }
+        }
+      });
+      // 6 adjusted picture
+      if (first) title(5, c, titles[5]); drawCv(tint(ch.adj, ch.lut, ch.vmin, ch.vmax), 5, c); diag(5, c); bar(5, c);
+      // 2 / 7 profiles
+      const fv = S.pxView, fe = S.pxEst, pr = diagProfile(ch.raw, dw, dh, 5), pa = diagProfile(ch.adj, dw, dh, 5), po = diagProfile(ch.old.smooth, S.ew, S.eh, 1), pn = diagProfile(ch.nw.smooth, S.ew, S.eh, 1);
+      if (first) { title(1, c, titles[1]); title(6, c, titles[6]); }
+      plot(1, c, [{ x: um(pr.d, fv), y: pr.v, color: '#000', lw: 1, label: 'raw data' }, { x: um(po.d, fe), y: po.v, color: '#dc143c', lw: 3, label: 'illumination map (initial)' }]);
+      plot(6, c, [{ x: um(pr.d, fv), y: pr.v, color: '#bbb', lw: 1, label: 'raw data' }, { x: um(pa.d, fv), y: pa.v, color: '#000', lw: 1.2, label: 'adjusted picture' }, { x: um(pn.d, fe), y: pn.v, color: '#dc143c', lw: 3, label: 'illumination map (adjusted)' }]);
+    }
+    if (C > 1) {
+      const r = C;
+      title(0, r, 'Merged channels\n(raw)'); drawCv(mergedCv('raw'), 0, r); bar(0, r); rowLabel(r, 'Merged');
+      title(5, r, 'Merged channels\n(adjusted)'); drawCv(mergedCv('adj'), 5, r); bar(5, r);
+      const lines = ['Settings used', '', ...used, '', `Camera offset: ${S.offset} gray values`, 'Colours: ' + m.chNames.map((n, c) => `${n} = ${S.luts[c]}`).join(', ')];
+      text(lines.join('\n'), (px(1) + px(4) + PW) / 2, py(r) + PH / 2 - lines.length * 11, FL, 'center', '#444', 26);
+    }
+    text(`Flat-field workflow - ${m.labels[S.frame]}` + (m.Z > 1 ? `, Z slice ${S.z + 1}/${m.Z}` : ''), W / 2, 58, '30px "Segoe UI",system-ui,sans-serif');
+    text(`Adjusted picture = (raw - offset) / illumination map + offset, shown with the same colour scale as the raw data. Both illumination maps share one colour scale (colour bar: gray values). Scalebar = ${CFG.SCALEBAR_UM} µm.`, W / 2, H - 28, FS, 'center', '#555');
+    const sec = $('#wf'); sec.classList.remove('hidden'); sec.innerHTML = '<h2>Workflow figure</h2><p class="sub">Built from the current image and Z slice with the current settings. Save it as a PNG for slides.</p><div class="btns"><button type="button" class="btn primary" id="wfSave">Save as PNG</button></div>';
+    cv.style.cssText = 'width:100%;height:auto;margin-top:10px;border:1px solid var(--line);border-radius:6px;background:#fff'; sec.appendChild(cv);
+    const tag = (m.labels[S.frame] || 'image').replace(/\s+/g, '_') + (m.Z > 1 ? `_Z${String(S.z + 1).padStart(3, '0')}` : '');
+    $('#wfSave').onclick = async () => { const blob = await new Promise(r => cv.toBlob(r, 'image/png')); saveBlob(`workflow_${tag}.png`, blob); };
+    setStatus(`${S.name} – workflow figure ready`); sec.scrollIntoView({ behavior: 'smooth' });
+  } catch (e) { console.error(e); setStatus('Workflow figure failed: ' + e.message, 'error'); }
+}
+
+/* ---- illumination profiles ---- */
+const MAGMA = [[0, [0, 0, 4]], [0.25, [80, 18, 123]], [0.5, [182, 54, 121]], [0.75, [251, 136, 97]], [1, [252, 253, 191]]];
+function magma(t) {
+  t = clamp(t, 0, 1);
+  for (let i = 1; i < MAGMA.length; i++) if (t <= MAGMA[i][0]) { const [t0, a] = MAGMA[i - 1], [t1, b] = MAGMA[i], f = (t - t0) / (t1 - t0); return a.map((v, k) => v + (b[k] - v) * f); }
+  return MAGMA[MAGMA.length - 1][1];
+}
+function diagProfile(a, w, h, band) {
+  const y0 = h - 1, x0 = 0, y1 = 0, x1 = w - 1, len = Math.hypot(y1 - y0, x1 - x0), n = Math.ceil(len) + 1;
+  const py = -(x1 - x0) / len, px = (y1 - y0) / len, d = new Float64Array(n), v = new Float64Array(n);
+  const at = (y, x) => { y = clamp(y, 0, h - 1); x = clamp(x, 0, w - 1); const j = Math.floor(y), i = Math.floor(x), fy = y - j, fx = x - i, j1 = Math.min(j + 1, h - 1), i1 = Math.min(i + 1, w - 1);
+    return (a[j * w + i] * (1 - fx) + a[j * w + i1] * fx) * (1 - fy) + (a[j1 * w + i] * (1 - fx) + a[j1 * w + i1] * fx) * fy; };
+  for (let k = 0; k < n; k++) {
+    const t = k / (n - 1), y = y0 + (y1 - y0) * t, x = x0 + (x1 - x0) * t; let s = 0;
+    for (let o = 0; o < band; o++) { const off = o - (band - 1) / 2; s += at(y + off * py, x + off * px); }
+    d[k] = t * len; v[k] = s / band;
+  }
+  return { d, v };
+}
+function plotLines(cv, xs, series, xl, yl) {
+  const dpr = window.devicePixelRatio || 1, CW = 520, CH = 270; cv.width = CW * dpr; cv.height = CH * dpr;
+  const ctx = cv.getContext('2d'); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const ink = cssVar('--ink'), muted = cssVar('--muted'), line = cssVar('--line');
+  const L = 58, R = 12, T = 12, B = 70, pw = CW - L - R, ph = CH - T - B;
+  let ymin = Infinity, ymax = -Infinity; for (const s of series) for (const v of s.y) { if (v < ymin) ymin = v; if (v > ymax) ymax = v; }
+  const pad = 0.06 * (ymax - ymin + 1e-6); ymin -= pad; ymax += pad; const xmax = xs[xs.length - 1];
+  const X = x => L + x / xmax * pw, Y = y => T + (1 - (y - ymin) / (ymax - ymin)) * ph;
+  ctx.font = '11px system-ui,sans-serif'; ctx.fillStyle = muted; ctx.strokeStyle = line; ctx.lineWidth = 1;
+  ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i++) { const y = ymin + (ymax - ymin) * i / 4; ctx.beginPath(); ctx.moveTo(L, Y(y)); ctx.lineTo(L + pw, Y(y)); ctx.stroke(); ctx.fillText(y.toFixed(0), L - 5, Y(y)); }
+  ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+  for (let i = 0; i <= 4; i++) { const x = xmax * i / 4; ctx.beginPath(); ctx.moveTo(X(x), T); ctx.lineTo(X(x), T + ph); ctx.stroke(); ctx.fillText(x.toFixed(0), X(x), T + ph + 4); }
+  ctx.fillText(xl, L + pw / 2, T + ph + 20);
+  ctx.save(); ctx.translate(12, T + ph / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(yl, 0, 0); ctx.restore();
+  for (const s of series) { ctx.strokeStyle = s.color; ctx.lineWidth = s.w; ctx.beginPath(); for (let i = 0; i < xs.length; i++) { const px = X(xs[i]), py = Y(s.y[i]); i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); } ctx.stroke(); }
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; series.forEach((s, i) => { const y = T + ph + 46 + i * 0 , x = L + i * 170; ctx.fillStyle = s.color; ctx.fillRect(x, T + ph + 46, 14, 3); ctx.fillStyle = ink; ctx.fillText(s.label, x + 19, T + ph + 48); });
+}
+function toggleIllum() {
+  const sec = $('#illum'), show = sec.classList.contains('hidden'); sec.classList.toggle('hidden', !show); $('#bIll').classList.toggle('on', show);
+  if (show) drawIllum();
+}
+function afterIllum() { if (!$('#illum').classList.contains('hidden')) drawIllum(); if (S.showObjects) scheduleObjects(); }
+function drawIllum() {
+  const m = S.meta, sec = $('#illum'), w = S.ew, h = S.eh;
+  sec.innerHTML = `<h2>Illumination profiles</h2><p class="sub">The map shows how bright an evenly stained sample would look across the field. The curves follow the diagonal from bottom-left to top-right (dashed line); the red curve is the estimate used for the correction.</p><div class="igrid"></div>`;
+  const grid = $('.igrid', sec);
+  for (let c = 0; c < m.C; c++) {
+    const info = S.illum[c], sm = info.smooth; let mn = Infinity, mx = -Infinity; for (const v of sm) { if (v < mn) mn = v; if (v > mx) mx = v; }
+    const card = document.createElement('div'); card.className = 'icard';
+    card.innerHTML = `<h4></h4><canvas class="map" width="${w}" height="${h}"></canvas><div class="bar"><span>${mn.toFixed(0)}</span><span>gray value</span><span>${mx.toFixed(0)}</span></div><canvas class="plot"></canvas>`;
+    $('h4', card).textContent = `${m.chNames[c]} – flat-field from: ${MODE_LABELS[info.mode]} (darkest spot = ${(100 * mn / mx).toFixed(0)}% of brightest)`;
+    grid.appendChild(card);
+    const cv = $('.map', card), ctx = cv.getContext('2d'), id = ctx.createImageData(w, h);
+    for (let i = 0; i < sm.length; i++) { const col = magma((sm[i] - mn) / Math.max(mx - mn, 1e-6)); id.data[i * 4] = col[0]; id.data[i * 4 + 1] = col[1]; id.data[i * 4 + 2] = col[2]; id.data[i * 4 + 3] = 255; }
+    ctx.putImageData(id, 0, 0); ctx.strokeStyle = '#fff'; ctx.setLineDash([6, 4]); ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(0, h); ctx.lineTo(w, 0); ctx.stroke();
+    const pr = diagProfile(info.base, w, h, 5), pe = diagProfile(sm, w, h, 1), um = Array.from(pr.d, v => v * S.pxEst);
+    plotLines($('.plot', card), um, [{ y: pr.v, color: cssVar('--ink'), w: 0.8, label: 'median raw image' }, { y: pe.v, color: '#d6264a', w: 2.2, label: 'illumination estimate (used)' }], 'Distance along diagonal (µm)', 'Gray value');
+  }
+}
+
+/* ---- export / settings ---- */
+async function saveBlob(name, data) {
+  try {
+    const dl = window.claude && window.claude.use ? await window.claude.use('downloads') : null;
+    if (dl) { await dl.save({ filename: name, data }); return; }
+  } catch (e) { if (e && e.code === 'declined') return; console.warn(e); }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(data instanceof Blob ? data : new Blob([data])); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+}
+async function exportSlice() {
+  const m = S.meta, { W, H, C } = m;
+  setStatus('Rendering full-resolution export …', 'busy'); await tick();
+  try {
+    const planar = await S.src.readPlanar(m.seqOf(S.frame, S.z)), s = S.strength, cvs = [];
+    const merged = new Float32Array(W * H * 3);
+    for (let c = 0; c < C; c++) {
+      let a = planar[c];
+      if (s > 0) { const f = resizeBilinear(S.illum[c].flat, S.ew, S.eh, W, H), d = s * S.illum[c].dark, b = new Float32Array(a.length); for (let i = 0; i < b.length; i++) b[i] = Math.max(a[i] - d, 0) / (s === 1 ? f[i] : Math.pow(f[i], s)); a = b; }
+      if (S.sigma > 0) a = gaussian(a, W, H, S.sigma);
+      const cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d'), id = ctx.createImageData(W, H), d = id.data;
+      const lut = LUTS[S.luts[c]], inv = 1 / Math.max(S.hi[c] - S.lo[c], 1e-6);
+      for (let i = 0; i < a.length; i++) { const n = clamp((a[i] - S.lo[c]) * inv, 0, 1); for (let k = 0; k < 3; k++) { const v = n * lut[k]; d[i * 4 + k] = v * 255; merged[i * 3 + k] += v; } d[i * 4 + 3] = 255; }
+      ctx.putImageData(id, 0, 0); cvs.push(cv);
+    }
+    const mc = document.createElement('canvas'); mc.width = W; mc.height = H; const mctx = mc.getContext('2d'), mid = mctx.createImageData(W, H);
+    for (let i = 0; i < W * H; i++) { for (let k = 0; k < 3; k++) mid.data[i * 4 + k] = clamp(merged[i * 3 + k], 0, 1) * 255; mid.data[i * 4 + 3] = 255; }
+    mctx.putImageData(mid, 0, 0); cvs.push(mc);
+    cvs.forEach(cv => burnBar(cv.getContext('2d'), W, H, m.pxUm));
+    const gap = 10, out = document.createElement('canvas'); out.width = cvs.length * W + gap * (cvs.length - 1); out.height = H;
+    const octx = out.getContext('2d'); octx.fillStyle = '#fff'; octx.fillRect(0, 0, out.width, out.height);
+    cvs.forEach((cv, i) => octx.drawImage(cv, i * (W + gap), 0));
+    const blob = await new Promise(r => out.toBlob(r, 'image/png'));
+    const base = S.name.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_'), tag = (m.labels[S.frame] || 'image').replace(/\s+/g, '_') + (m.Z > 1 ? `_Z${String(S.z + 1).padStart(3, '0')}` : '') + (s !== 1 ? `_ff${String(Math.round(s * 100)).padStart(3, '0')}` : '');
+    setStatus(`${S.name} – ready`); await saveBlob(`${base}_${tag}_montage.png`, blob);
+  } catch (e) { console.error(e); setStatus('Export failed: ' + e.message, 'error'); }
+}
+function saveSettings() {
+  const o = { lo: S.lo, hi: S.hi, luts: S.luts, sigma: S.sigma, strength: S.strength, flat_modes: S.want, detect: S.detect, share_objects: S.share, camera_offset: S.offset, pixel_size_um: S.meta.pxUm };
+  saveBlob(S.name.replace(/\.[^.]+$/, '') + '_view_settings.json', JSON.stringify(o, null, 2));
+}
+async function applySettings(s) {
+  const C = S.meta.C; let redo = false;
+  if (Array.isArray(s.luts)) for (let c = 0; c < Math.min(C, s.luts.length); c++) if (LUTS[s.luts[c]]) { S.luts[c] = s.luts[c]; S.lo[c] = +s.lo[c]; S.hi[c] = +s.hi[c]; setBoxes(c); S.ui[c].col.querySelectorAll('.luts button').forEach((b, i) => b.setAttribute('aria-pressed', LUT_NAMES[i] === S.luts[c])); }
+  if ('sigma' in s) { S.sigma = +s.sigma; const i = $('#sSm'); i.value = S.sigma; i.nextElementSibling.textContent = S.sigma.toFixed(2); }
+  if ('strength' in s) { S.strength = +s.strength; const i = $('#sSt'); i.value = S.strength; i.nextElementSibling.textContent = S.strength.toFixed(2); }
+  if ('camera_offset' in s && s.camera_offset != null && +s.camera_offset !== S.offset) { S.offset = +s.camera_offset; S.tbOff.value = S.offset; redo = true; }
+  if (Array.isArray(s.flat_modes)) s.flat_modes.slice(0, C).forEach((k, c) => { if (MODE_LABELS[k] && k !== S.want[c]) { S.want[c] = k; redo = true; S.ui[c].col.querySelector(`input[name=mode${c}][value=${k}]`).checked = true; } });
+  if (Array.isArray(s.detect)) s.detect.slice(0, C).forEach((k, c) => { if (DETECT_LABELS[k] && k !== S.detect[c]) { S.detect[c] = k; redo = true; S.ui[c].col.querySelector(`input[name=det${c}][value=${k}]`).checked = true; } });
+  if (Array.isArray(s.share_objects)) s.share_objects.slice(0, C).forEach((v, c) => { const cb = S.ui[c].col.querySelector('.share'); if (cb && cb.checked !== !!v) { cb.checked = !!v; S.share[c] = !!v; redo = true; } });
+  if (redo) { await recomputeAll(); updateNotes(); afterIllum(); setStatus(`${S.name} – ready`); }
+  S.corrKey = null; refresh();
+}
+$('#settingsFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f || !S.meta) return;
+  try { await applySettings(JSON.parse(await f.text())); } catch (err) { setStatus('Could not read settings: ' + err.message, 'error'); }
+};
+
+/* ---- loading ---- */
+async function startDataset(src, name) {
+  S.src = src; S.name = name; S.frames.clear(); S.corrKey = null; S.tok = 0; S.showObjects = false;
+  const m = src.meta, noPx = !(m.pxUm > 0); if (noPx) m.pxUm = 1;
+  setGeometry(m);
+  await prepareEst(src, (i, n) => setStatus(`Sampling image ${i}/${n} for the illumination estimate …`, 'busy'));
+  const C = m.C;
+  S.frame = 0; S.z = Math.floor(m.Z / 2); S.sigma = 1; S.strength = 1; S.offset = 0; S.illumVer = 0;
+  S.want = new Array(C).fill('image'); S.detect = new Array(C).fill('bright'); $('#wf').classList.add('hidden'); S.share = new Array(C).fill(C > 1);
+  S.luts = m.chNames.map((n, i) => guessLut(n, i)); S.lo = new Array(C).fill(0); S.hi = new Array(C).fill(1);
+  await recomputeAll();
+  $('#empty').classList.add('hidden'); $('#app').classList.remove('hidden'); $('#illum').classList.add('hidden');
+  buildPanels(); buildToolbar(); updateNotes();
+  S.cur = await getFrame(S.frame, S.z); corrected(S.cur); for (let c = 0; c < C; c++) autoBC(c);
+  draw(); S.hist && drawHists(S.corr);
+  const info = `${name}: ${m.N} image(s), ${m.Z} Z slice(s), ${C} channel(s), ${m.W}×${m.H} px, ${m.pxUm.toFixed(4)} µm/px`;
+  setStatus(noPx ? info + ' – pixel size not found in the file, please enter it in the toolbar (scalebar).' : info);
+}
+async function openFile(f) {
+  if (!f) return;
+  try { setStatus('Reading ' + f.name + ' …', 'busy'); await tick(); await startDataset(await openND2(f), f.name); }
+  catch (e) { console.error(e); setStatus('Could not open file: ' + e.message, 'error'); }
+}
+$('#file').onchange = e => { const f = e.target.files[0]; e.target.value = ''; openFile(f); };
+$('#demo').onclick = async () => { try { setStatus('Creating demo data …', 'busy'); await tick(); await startDataset(makeDemo(), 'demo.nd2'); } catch (e) { console.error(e); setStatus('Demo failed: ' + e.message, 'error'); } };
+['dragover', 'dragenter'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); $('#empty').classList.add('drag'); }));
+['dragleave', 'drop'].forEach(t => window.addEventListener(t, e => { e.preventDefault(); $('#empty').classList.remove('drag'); }));
+window.addEventListener('drop', e => { const f = e.dataTransfer && e.dataTransfer.files[0]; if (f) openFile(f); });
+window.addEventListener('resize', () => { if (S.corr) drawHists(S.corr); });
+</script>
+</body>
+</html>
